@@ -1,27 +1,106 @@
 ﻿namespace TypeShape.Json
 
-//type JsonPickler<'T> =
-//    abstract Pickle : JsonWriter -> 'T -> unit
-//    abstract UnPickle : JsonReader -> 'T
+open System
 
+type JsonPickler<'T> =
+    abstract Pickle : JsonWriter -> 'T -> unit
+    abstract UnPickle : JsonReader -> 'T
 
-//type StringPickler() =
-//    interface JsonPickler<string> with
-//        member __.Pickle writer str = 
-//            match str with
-//            | null -> writer.Null()
-//            | _ -> writer.String str
+type BoolPickler() =
+    interface JsonPickler<bool> with
+        member __.Pickle writer bool = writer.Bool bool
+        member __.UnPickle reader =
+            let tok = reader.NextToken()
+            tok.AsBoolean()
 
-//        member __.UnPickle reader =
-//            let tok = reader.NextToken()
-//            match tok.Tag with
-//            | JsonTag.Null -> null
-//            | JsonTag.String -> tok.Value
-//            | JsonTag.Number -> tok.Value
-//            | JsonTag.Bool -> if tok.Bool then "true" else "false"
-//            | _ -> failwithf "Unexpected JSON token %O" tok.Tag
+type StringPickler() =
+    interface JsonPickler<string> with
+        member __.Pickle writer str = writer.WriteValue str
 
-//type Int32Pickler() =
-//    interface JsonPickler<int> with
-//        member __.Pickle writer int =
-            
+        member __.UnPickle reader =
+            let tok = reader.NextToken()
+            tok.AsString()
+
+type SBytePickler() =
+    interface JsonPickler<sbyte> with
+        member __.Pickle writer byte = writer.WriteValue byte
+        member __.UnPickle reader =
+            let tok = reader.NextToken()
+            tok.AsSByte reader.Format
+
+type Int16Pickler() =
+    interface JsonPickler<int16> with
+        member __.Pickle writer int16 = writer.WriteValue int16
+        member __.UnPickle reader =
+            let tok = reader.NextToken()
+            tok.AsInt16 reader.Format
+
+type Int32Pickler() =
+    interface JsonPickler<int32> with
+        member __.Pickle writer int = writer.WriteValue int
+        member __.UnPickle reader = 
+            let tok = reader.NextToken()
+            tok.AsInt32 reader.Format
+
+type Int64Pickler() =
+    interface JsonPickler<int64> with
+        member __.Pickle writer int = writer.WriteValue int
+        member __.UnPickle reader = 
+            let tok = reader.NextToken()
+            tok.AsInt64 reader.Format
+
+type BytePickler() =
+    interface JsonPickler<byte> with
+        member __.Pickle writer byte = writer.WriteValue byte
+        member __.UnPickle reader =
+            let tok = reader.NextToken()
+            tok.AsByte reader.Format
+
+type UInt16Pickler() =
+    interface JsonPickler<uint16> with
+        member __.Pickle writer int16 = writer.WriteValue int16
+        member __.UnPickle reader =
+            let tok = reader.NextToken()
+            tok.AsUInt16 reader.Format
+
+type UInt32Pickler() =
+    interface JsonPickler<uint32> with
+        member __.Pickle writer int = writer.WriteValue int
+        member __.UnPickle reader = 
+            let tok = reader.NextToken()
+            tok.AsUInt32 reader.Format
+
+type UInt64Pickler() =
+    interface JsonPickler<uint64> with
+        member __.Pickle writer int = writer.WriteValue int
+        member __.UnPickle reader = 
+            let tok = reader.NextToken()
+            tok.AsUInt64 reader.Format
+
+type TimeSpanPickler() =
+    interface JsonPickler<TimeSpan> with
+        member __.Pickle writer timespan = writer.WriteValue timespan
+        member __.UnPickle reader =
+            let tok = reader.NextToken()
+            tok.AsTimeSpan reader.Format
+
+type BigIntegerPickler() =
+    interface JsonPickler<bigint> with
+        member __.Pickle writer bigint = writer.WriteValue bigint
+        member __.UnPickle reader =
+            let tok = reader.NextToken()
+            tok.AsBigInteger reader.Format
+
+type DateTimePickler() =
+    interface JsonPickler<DateTime> with
+        member __.Pickle writer datetime = writer.WriteValue datetime
+        member __.UnPickle reader =
+            let tok = reader.NextToken()
+            tok.AsDateTime reader.Format
+
+type DateTimeOffsetPickler() =
+    interface JsonPickler<DateTimeOffset> with
+        member __.Pickle writer dto = writer.WriteValue dto
+        member __.UnPickle reader =
+            let tok = reader.NextToken()
+            tok.AsDateTimeOffset reader.Format

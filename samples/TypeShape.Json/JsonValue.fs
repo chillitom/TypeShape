@@ -5,11 +5,15 @@ open System.Globalization
 open System.Collections.Generic
 open System.Numerics
 
-[<CompilationRepresentation(CompilationRepresentationFlags.UseNullAsTrueValue)>]
+[<Struct; StructuredFormatDisplay("{Value}")>]
+type internal JsonNumber(value : string) =
+    member __.Value = value
+
+[<NoEquality; NoComparison; CompilationRepresentation(CompilationRepresentationFlags.UseNullAsTrueValue)>]
 type internal JsonExpr =
     | Null
     | Bool of bool
-    | Number of string
+    | Number of JsonNumber
     | String of string
     | Array of JsonExpr []
     | Object of KeyValuePair<string, JsonExpr> []
@@ -26,13 +30,12 @@ module private JsonValueImpl =
         | JsonExpr.Object _ -> "object"
         | JsonExpr.Array _ -> "array"
 
-    let formatJson (value : JsonExpr) =
-        let writer = new JsonWriter(0)
+    let formatJson (writer : JsonWriter) (value : JsonExpr) =
         let rec aux value =
             match value with
             | Null ->  writer.Null()
             | Bool b -> writer.Bool b
-            | Number num -> writer.Number num
+            | Number num -> writer.Number num.Value
             | String s -> writer.String s
             | Array items -> 
                 writer.StartArray()
@@ -63,20 +66,18 @@ module private JsonValueImpl =
                 writer.EndObject()
 
         do aux value
-        writer.ToJson()
 
-    let parseJson (json : string) =
+    let parseJson (reader : JsonReader) =
         let mutable arrBuff = Unchecked.defaultof<ResizeArray<JsonExpr>>
         let mutable recBuf = Unchecked.defaultof<ResizeArray<KeyValuePair<string, JsonExpr>>>
         let inline error (tag : JsonTag) = failwithf "Unexpected JSON tag %O" tag
-        let reader = new JsonReader(json)
 
         let rec parse (token : JsonToken) =
             match token.Tag with
             | JsonTag.Null -> Null
             | JsonTag.False -> Bool false
             | JsonTag.True -> Bool true
-            | JsonTag.Number -> Number token.Value
+            | JsonTag.Number -> Number (JsonNumber token.Value)
             | JsonTag.String -> String token.Value
             | JsonTag.StartArray ->
                 let token = reader.NextToken()
@@ -143,31 +144,40 @@ type JsonValue internal (expr : JsonExpr) =
     member internal __.Expr = expr
     member private __.SFD = sprintf "%+A" expr
     override __.ToString () = __.SFD
-    member __.ToJson() = formatJson __.Expr
-    static member FromJson json = 
-        match json with 
-        | null -> raise <| ArgumentNullException(json)
-        | _ -> JsonValue(parseJson json)
+    member __.ToJson() = 
+        let writer = JsonWriter(0, CultureInfo.InvariantCulture)
+        formatJson writer expr
+        writer.ToJson()
 
+    static member FromJson(json, ?format : IFormatProvider) =
+        let format = defaultArg format (CultureInfo.InvariantCulture :> _)
+        let reader = JsonReader(json, format)
+        let expr = parseJson reader
+        JsonValue expr
+
+type JsonValuePickler() =
+    interface JsonPickler<JsonValue> with
+        member __.Pickle writer jval = formatJson writer jval.Expr
+        member __.UnPickle reader = JsonValue(parseJson reader)
 
 [<AutoOpen>]
 module private JsonValueFmtUtils =
 
-    let inline fmtNumeric fmt value =
-        let format = (^t : (member ToString : IFormatProvider -> string) (value, fmt))
-        JsonValue(Number format)
+    let inline fmtNumeric value =
+        let format = (^t : (member ToString : IFormatProvider -> string) (value, CultureInfo.InvariantCulture))
+        JsonValue(Number (JsonNumber format))
 
-    let inline fmtFloat fmt value =
+    let inline fmtFloat value =
         if (^t : (static member IsNaN : ^t -> bool) value) then JsonValue(String Constants.NaN)
         elif (^t : (static member IsPositiveInfinity : ^t -> bool) value) then JsonValue(String Constants.PositiveInfinity)
         elif (^t : (static member IsNegativeInfinity : ^t -> bool) value) then JsonValue(String Constants.NegativeInfinity)
-        else fmtNumeric fmt value
+        else fmtNumeric value
 
     let inline parseNumeric fmt nullVal (expr : JsonExpr) =
         match expr with
         | Null -> nullVal
         | Bool b -> if b then LanguagePrimitives.GenericOne else LanguagePrimitives.GenericZero
-        | Number n -> parse fmt n
+        | Number n -> parse fmt n.Value
         | String s -> parse fmt s
         | _ -> cannotCoerce expr
 
@@ -185,32 +195,21 @@ type JsonValue with
         values |> Seq.mapFast (fun v -> v.Expr) |> JsonExpr.Array |> JsonValue
 
     static member Object(values : #seq<KeyValuePair<string, JsonValue>>) =
-        values |> Seq.mapFast (fun v -> KeyValuePair(v.Key, v.Value.Expr)) |> JsonExpr.Object |> JsonValue
+        values |> Seq.mapFast (fun v -> KeyValuePair(v.Key, let e = v.Value in e.Expr)) |> JsonExpr.Object |> JsonValue
 
     static member Object(values : seq<string * JsonValue>) =
         values |> Seq.mapFast (fun (k,v) -> KeyValuePair(k, v.Expr)) |> JsonExpr.Object |> JsonValue
 
-    static member Number(int16 : int16, fmt) = fmtNumeric fmt int16
-    static member Number(int32 : int32, fmt) = fmtNumeric fmt int32
-    static member Number(int64 : int64, fmt) = fmtNumeric fmt int64
-    static member Number(uint16 : uint16, fmt) = fmtNumeric fmt uint16
-    static member Number(uint32 : uint32, fmt) = fmtNumeric fmt uint32
-    static member Number(uint64 : uint64, fmt) = fmtNumeric fmt uint64
-    static member Number(decimal : decimal, fmt) = fmtNumeric fmt decimal
-    static member Number(bigint : bigint, fmt) = fmtNumeric fmt bigint
-    static member Number(single : single, fmt) = fmtFloat fmt single
-    static member Number(double : double, fmt) = fmtFloat fmt double
-
-    static member Number(int16 : int16) = fmtNumeric CultureInfo.InvariantCulture int16
-    static member Number(int32 : int32) = fmtNumeric CultureInfo.InvariantCulture int32
-    static member Number(int64 : int64) = fmtNumeric CultureInfo.InvariantCulture int64
-    static member Number(uint16 : uint16) = fmtNumeric CultureInfo.InvariantCulture uint16
-    static member Number(uint32 : uint32) = fmtNumeric CultureInfo.InvariantCulture uint32
-    static member Number(uint64 : uint64) = fmtNumeric CultureInfo.InvariantCulture uint64
-    static member Number(decimal : decimal) = fmtNumeric CultureInfo.InvariantCulture decimal
-    static member Number(bigint : bigint) = fmtNumeric CultureInfo.InvariantCulture bigint
-    static member Number(single : single) = fmtFloat CultureInfo.InvariantCulture single
-    static member Number(double : double) = fmtFloat CultureInfo.InvariantCulture double
+    static member Number(int16 : int16) = fmtNumeric int16
+    static member Number(int32 : int32) = fmtNumeric int32
+    static member Number(int64 : int64) = fmtNumeric int64
+    static member Number(uint16 : uint16) = fmtNumeric uint16
+    static member Number(uint32 : uint32) = fmtNumeric uint32
+    static member Number(uint64 : uint64) = fmtNumeric uint64
+    static member Number(decimal : decimal) = fmtNumeric decimal
+    static member Number(bigint : bigint) = fmtNumeric bigint
+    static member Number(single : single) = fmtFloat single
+    static member Number(double : double) = fmtFloat double
 
 
 type JsonValue with
@@ -219,16 +218,16 @@ type JsonValue with
         | Null -> null
         | Bool b -> b.ToString(CultureInfo.InvariantCulture)
         | String s -> s
-        | Number s -> s
+        | Number n -> n.Value
         | e -> cannotCoerce e
 
     member __.AsBoolean() =
         match __.Expr with
         | Null -> false
         | Bool b -> b
-        | Number s as e ->
+        | Number n as e ->
             let mutable iv = 0
-            if Int32.TryParse(s, &iv) then iv <> 0
+            if Int32.TryParse(n.Value, &iv) then iv <> 0
             else cannotCoerce e
 
         | String s as e ->
@@ -270,7 +269,7 @@ module JsonValue =
         match json.Expr with
         | JsonExpr.Null -> Null
         | JsonExpr.Bool b -> Bool b
-        | JsonExpr.Number n -> Number n
+        | JsonExpr.Number n -> Number n.Value
         | JsonExpr.String s -> String s
         | JsonExpr.Array js -> Array(js |> Array.mapFast JsonValue)
         | JsonExpr.Object fs -> Object(fs |> Array.mapFast (fun f -> KeyValuePair(f.Key, JsonValue f.Value)))

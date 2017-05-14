@@ -37,11 +37,12 @@ type JsonToken(tag : JsonTag, value : string, index : int) =
     static member inline EndArray i = new JsonToken(JsonTag.EndArray, null, i)
     static member inline EOF i = new JsonToken(JsonTag.EOF, null, i)
 
-    //member inline tok.AsBoolean(fmt : IFormatProvider) =
-    //    match tok.Tag with
-
 [<AutoOpen>]
 module private JsonReaderImpl =
+    open Constants
+
+    let inline unexpectedToken (tok : JsonToken) =
+        failwithf "Unexpected JSON token '%O' at position %d" tok.Tag tok.Index
 
     let inline failRead (input : string) (pos : int) =
         failwithf "Invalid JSON string '%s'" input.[max (pos - 3) 0 .. min (pos + 3) (input.Length - 1)]
@@ -141,11 +142,58 @@ module private JsonReaderImpl =
 
         if notCompleted then failRead input i
         sb.ToString()
+
+    let inline parseNumeric fmt nullVal (tok : JsonToken) =
+        match tok.Tag with
+        | JsonTag.Null -> nullVal
+        | JsonTag.False -> LanguagePrimitives.GenericZero
+        | JsonTag.True -> LanguagePrimitives.GenericOne
+        | JsonTag.Number -> 
+            let mutable num = Unchecked.defaultof< ^t>
+            if tryParseNumber fmt &num tok.Value then num
+            else unexpectedToken tok
+        | JsonTag.String -> 
+            let mutable num = Unchecked.defaultof< ^t>
+            if tryParseNumber fmt &num tok.Value then num
+            else
+                let mutable bool = false
+                if Boolean.TryParse(tok.Value, &bool) then 
+                    if bool then LanguagePrimitives.GenericOne 
+                    else LanguagePrimitives.GenericZero
+                else unexpectedToken tok
+        | _ -> unexpectedToken tok
+        
+    let inline parseFloat fmt nullVal negInf posInf (tok : JsonToken) : ^t =
+        match tok.Tag with
+        | JsonTag.Null -> nullVal
+        | JsonTag.False -> LanguagePrimitives.GenericZero
+        | JsonTag.True -> LanguagePrimitives.GenericOne
+        | JsonTag.Number -> 
+            let mutable num = Unchecked.defaultof< ^t>
+            if tryParseNumber fmt &num tok.Value then num
+            else unexpectedToken tok
+        | JsonTag.String ->
+            match tok.Value with
+            | "-Infinity" -> negInf
+            | "Infinity" -> posInf
+            | _ ->
+                let mutable num = Unchecked.defaultof< ^t>
+                if tryParseNumber fmt &num tok.Value then num
+                else
+                    let mutable bool = false
+                    if Boolean.TryParse(tok.Value, &bool) then 
+                        if bool then LanguagePrimitives.GenericOne 
+                        else LanguagePrimitives.GenericZero
+                    else unexpectedToken tok
+
+        | _ -> unexpectedToken tok
         
 
-type JsonReader(input : string) =
+type JsonReader(input : string, format : IFormatProvider) =
     let mutable pos = 0
     let sb = new StringBuilder()
+
+    member __.Format = format
 
     member __.NextToken() : JsonToken =
         let input = input
@@ -171,8 +219,88 @@ type JsonReader(input : string) =
             let str = parseQuotedString input n sb &i
             pos <- i ; JsonToken.String idx str
 
-        | c -> 
+        | _ -> 
             let str = parseUnquotedString input n sb &i
             pos <- i ; 
             if isNumber str then JsonToken.Number idx str
             else JsonToken.String idx str
+
+
+type JsonToken with
+    member tok.AsBoolean() : bool =
+        match tok.Tag with
+        | JsonTag.Null 
+        | JsonTag.False -> false
+        | JsonTag.True -> true
+        | JsonTag.Number -> 
+            let mutable num = 0
+            if Int32.TryParse(tok.Value, &num) then num <> 0
+            else unexpectedToken tok
+
+        | JsonTag.String ->
+            let mutable bool = false
+            if Boolean.TryParse(tok.Value, &bool) then bool
+            else unexpectedToken tok
+
+        | _ -> unexpectedToken tok
+
+    member tok.AsString() : string =
+        match tok.Tag with
+        | JsonTag.Null -> null
+        | JsonTag.False -> Constants.False
+        | JsonTag.True -> Constants.True
+        | JsonTag.Number -> tok.Value
+        | JsonTag.String -> tok.Value
+        | _ -> unexpectedToken tok
+
+
+    member tok.AsByte fmt : byte = parseNumeric fmt 0uy tok
+    member tok.AsInt16 fmt : int16 = parseNumeric fmt 0s tok
+    member tok.AsInt32 fmt : int32 = parseNumeric fmt 0 tok
+    member tok.AsInt64 fmt : int64 = parseNumeric fmt 0L tok
+
+    member tok.AsSByte fmt : sbyte = parseNumeric fmt 0y tok
+    member tok.AsUInt16 fmt : uint16 = parseNumeric fmt 0us tok
+    member tok.AsUInt32 fmt : uint32 = parseNumeric fmt 0u tok
+    member tok.AsUInt64 fmt : uint64 = parseNumeric fmt 0uL tok
+
+    member tok.AsBigInteger fmt : bigint = parseNumeric fmt 0I tok
+
+    member tok.AsSingle fmt : single = parseFloat fmt Single.NaN Single.NegativeInfinity Single.PositiveInfinity tok
+    member tok.AsDouble fmt : double = parseFloat fmt Double.NaN Double.NegativeInfinity Double.PositiveInfinity tok
+
+    member tok.AsTimeSpan fmt : TimeSpan =
+        match tok.Tag with
+        | JsonTag.String ->
+            let mutable result = Unchecked.defaultof<_>
+            if TimeSpan.TryParse("G", fmt, &result) then result
+            else
+                unexpectedToken tok
+
+        | _ -> unexpectedToken tok
+
+    member tok.AsDateTime fmt : DateTime =
+        match tok.Tag with
+        | JsonTag.String ->
+            let mutable result = Unchecked.defaultof<_>
+            if DateTime.TryParse(tok.Value, fmt, DateTimeStyles.None, &result) then result
+            else
+                unexpectedToken tok
+
+        | _ -> unexpectedToken tok
+
+    member tok.AsDateTimeOffset fmt : DateTimeOffset =
+        match tok.Tag with
+        | JsonTag.String -> 
+            let mutable result = Unchecked.defaultof<_>
+            if DateTimeOffset.TryParse(tok.Value, fmt, DateTimeStyles.None, &result) then result
+            else
+                unexpectedToken tok
+
+        | _ -> unexpectedToken tok
+
+    member tok.AsByteArray() : byte[] =
+        match tok.Tag with
+        | JsonTag.Null -> null
+        | JsonTag.String -> Convert.FromBase64String tok.Value
+        | _ -> unexpectedToken tok

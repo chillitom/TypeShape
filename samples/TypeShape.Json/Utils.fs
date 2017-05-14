@@ -3,6 +3,7 @@ module internal TypeShape.Json.Utils
 
 open System
 open System.Text
+open System.Globalization
 
 let inline append sb t =
     let _ = (^StringBuilder : (member Append : ^t -> ^StringBuilder) (sb, t))
@@ -24,11 +25,15 @@ let inline getOrInit (ref : byref< ^t>) =
     | null -> ref <- new ^t() ; ref
     | _ -> (^t : (member Clear : unit -> unit) ref) ; ref
 
-let inline format fmt (x : ^t) =
-    (^t : (member ToString : IFormatProvider -> string) (x, fmt))
+let inline format fmt (input : ^t) =
+    (^t : (member ToString : IFormatProvider -> string) (input, fmt))
 
-let inline parse fmt (x : string) =
-    (^t : (static member Parse : string * IFormatProvider -> ^t) (x, fmt))
+let inline parse fmt (input : string) =
+    (^t : (static member Parse : string * IFormatProvider -> ^t) (input, fmt))
+
+let inline tryParseNumber fmt (result : byref<_>) (input : string) =
+    (^t : (static member TryParse : string * NumberStyles * IFormatProvider * byref< ^t> -> bool) 
+                                (input, NumberStyles.Any, fmt, &result))
 
 module Array =
     let inline mapFast (f : ^a -> ^b) (xs : ^a[]) =

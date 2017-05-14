@@ -68,12 +68,27 @@ let screate i =
 
 #time "on"
 
+// Real: 00:00:01.616, CPU: 00:00:01.578, GC gen0: 1525, gen1: 1, gen2: 0
 for i = 1 to 100000000 do
     let value = ccreate (int64 i)
     let _ = value.GetHashCode()
     ()
 
+// Real: 00:00:02.421, CPU: 00:00:02.421, GC gen0: 0, gen1: 0, gen2: 0
 for i = 1 to 100000000 do
     let value = screate (int64 i)
     let _ = value.GetHashCode()
     ()
+
+
+open System.Collections.Generic
+
+let dict = new Dictionary<ClassU, int>()
+for i = 1 to 10000000 do
+    let value = ccreate (int64 i)
+    dict.Add(value, i)
+
+let dict' = new Dictionary<StructU, int>()
+for i = 1 to 10000000 do
+    let value = screate (int64 i)
+    dict'.Add(value, i)
