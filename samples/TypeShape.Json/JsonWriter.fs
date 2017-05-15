@@ -1,28 +1,64 @@
-﻿namespace TypeShape.Json
+﻿namespace Vardusia
 
 open System
 open System.Text
-open System.Globalization
+
+[<AutoOpen>]
+module private JsonWriterImpl =
+
+    let [<Literal>] spaceStrSize = 1024
+    let spacesStr = String(Constants.Space, spaceStrSize)
+    let spaceColonSpace = String [|Constants.Space; Constants.Colon; Constants.Space|]
+
+    let inline newLine indent depth (sb : StringBuilder) =
+        if indent > 0 then
+            let _ = sb.AppendLine()
+            let mutable spaces = indent * depth
+            while spaces > 0 do
+                let k = min spaces spaceStrSize
+                let _ = sb.Append(spacesStr, 0, k)
+                spaces <- spaces - k
 
 type JsonWriter(indent : int, fmt : IFormatProvider) =
-    let mutable depth = 0
     let sb = new StringBuilder()
+    let mutable depth = 0
 
     member __.Format = fmt
+
     member __.Null() = append sb Constants.Null
     member __.Bool b = if b then append sb Constants.True else append sb Constants.False
     member __.Number (n : string) = append sb n
     member __.String (s : string) = appendEscaped sb s
     member __.FieldName(name : string) =
         appendEscaped sb name
-        append sb Constants.Colon
+        if indent > 0 then
+            append sb spaceColonSpace
+        else
+            append sb Constants.Colon
 
-    member __.NextValue() = append sb Constants.Comma
+    member __.NextValue() =
+        append sb Constants.Comma
+        newLine indent depth sb
 
-    member __.StartObject() = append sb Constants.StartObject
-    member __.EndObject() = append sb Constants.EndObject
-    member __.StartArray() = append sb Constants.StartArray
-    member __.EndArray() = append sb Constants.EndArray
+    member __.StartObject() = 
+        append sb Constants.StartObject 
+        depth <- depth + 1 
+        newLine indent depth sb
+
+    member __.EndObject() = 
+        depth <- depth - 1 
+        newLine indent depth sb
+        append sb Constants.EndObject 
+
+    member __.StartArray() = 
+        append sb Constants.StartArray 
+        depth <- depth + 1
+        newLine indent depth sb
+
+    member __.EndArray() = 
+        depth <- depth - 1 
+        newLine indent depth sb
+        append sb Constants.EndArray
 
     member __.ToJson() = sb.ToString()
 
@@ -72,16 +108,16 @@ type JsonWriter with
 
     member inline jw.WriteValue(single : single) =
         if Single.IsNaN single then jw.Null()
-        elif Single.IsPositiveInfinity single then jw.String "Infinity"
-        elif Single.IsNegativeInfinity single then jw.String "-Infinity"
+        elif Single.IsPositiveInfinity single then jw.String Constants.PositiveInfinity
+        elif Single.IsNegativeInfinity single then jw.String Constants.NegativeInfinity
         else
             let value = format jw.Format single
             jw.Number value
 
     member inline jw.WriteValue(double : double) =
         if Double.IsNaN double then jw.Null()
-        elif Double.IsPositiveInfinity double then jw.String "Infinity"
-        elif Double.IsNegativeInfinity double then jw.String "-Infinity"
+        elif Double.IsPositiveInfinity double then jw.String Constants.PositiveInfinity
+        elif Double.IsNegativeInfinity double then jw.String Constants.NegativeInfinity
         else
             let value = format jw.Format double
             jw.Number value

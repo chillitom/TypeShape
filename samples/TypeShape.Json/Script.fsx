@@ -1,7 +1,7 @@
-﻿#r "bin/Debug/TypeShape.Json.dll"
+﻿#r "bin/Debug/Vardusia.dll"
 
 open System
-open TypeShape.Json
+open Vardusia
 
 let json =
     JsonValue.Array 
@@ -20,13 +20,14 @@ let json =
             JsonValue.String """{ "some" : "json", "here" : true }""" 
         ]
 
-let r = JsonValue.FromJson <| json.ToJson()
+let string = json.ToJson(indent = 4)
+
+Console.WriteLine string
+let r = JsonValue.FromJson <| json.ToJson(indent = 4)
 
 match r with
 | JsonValue.Element 0 (JsonValue.Field "bar" x) -> Some x
 | _ -> None
-
-let reader = new JsonReader(json.ToJson())
 
 reader.NextToken()
 

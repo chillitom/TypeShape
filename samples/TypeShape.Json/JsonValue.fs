@@ -1,4 +1,4 @@
-﻿namespace TypeShape.Json
+﻿namespace Vardusia
 
 open System
 open System.Globalization
@@ -144,8 +144,8 @@ type JsonValue internal (expr : JsonExpr) =
     member internal __.Expr = expr
     member private __.SFD = sprintf "%+A" expr
     override __.ToString () = __.SFD
-    member __.ToJson() = 
-        let writer = JsonWriter(0, CultureInfo.InvariantCulture)
+    member __.ToJson(?indent : int) = 
+        let writer = JsonWriter(defaultArg indent 0, CultureInfo.InvariantCulture)
         formatJson writer expr
         writer.ToJson()
 

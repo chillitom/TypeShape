@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 15
-VisualStudioVersion = 15.0.26403.7
+VisualStudioVersion = 15.0.26430.6
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "TypeShape", "src\TypeShape\TypeShape.fsproj", "{8609D2FB-063F-45FE-94E2-FF251792C495}"
 EndProject
@@ -41,7 +41,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "samples", "samples", "{4213
 		samples\testing.fsx = samples\testing.fsx
 	EndProjectSection
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "TypeShape.Json", "samples\TypeShape.Json\TypeShape.Json.fsproj", "{202E81AB-134E-4514-A269-BE8467FB23A9}"
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Vardusia", "samples\TypeShape.Json\Vardusia.fsproj", "{202E81AB-134E-4514-A269-BE8467FB23A9}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

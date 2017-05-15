@@ -1,5 +1,5 @@
 ﻿[<AutoOpen>]
-module internal TypeShape.Json.Utils
+module internal Vardusia.Utils
 
 open System
 open System.Text

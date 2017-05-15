@@ -1,4 +1,4 @@
-﻿namespace TypeShape.Json
+﻿namespace Vardusia
 
 open System
 open System.Text
@@ -174,8 +174,8 @@ module private JsonReaderImpl =
             else unexpectedToken tok
         | JsonTag.String ->
             match tok.Value with
-            | "-Infinity" -> negInf
-            | "Infinity" -> posInf
+            | Constants.NegativeInfinity -> negInf
+            | Constants.PositiveInfinity -> posInf
             | _ ->
                 let mutable num = Unchecked.defaultof< ^t>
                 if tryParseNumber fmt &num tok.Value then num
@@ -187,43 +187,66 @@ module private JsonReaderImpl =
                     else unexpectedToken tok
 
         | _ -> unexpectedToken tok
-        
 
-type JsonReader(input : string, format : IFormatProvider) =
-    let mutable pos = 0
-    let sb = new StringBuilder()
-
-    member __.Format = format
-
-    member __.NextToken() : JsonToken =
+    let inline parseToken (sb : StringBuilder) (i : byref<int>) (input : string) =
         let input = input
         let n = input.Length
-        let mutable i = pos
 
         if skipWhiteSpace input n &i then JsonToken.EOF n else
         
         let idx = i
 
         match input.[i] with
-        | 'n' when matchLiteral "null" input n &i -> pos <- i ; JsonToken.Null idx
-        | 'f' when matchLiteral "false" input n &i -> pos <- i ; JsonToken.False idx
-        | 't' when matchLiteral "true" input n &i -> pos <- i ; JsonToken.True idx
-        | Constants.StartObject -> pos <- i + 1 ; JsonToken.StartObject idx
-        | Constants.EndObject -> pos <- i + 1 ; JsonToken.EndObject idx
-        | Constants.StartArray -> pos <- i + 1 ; JsonToken.StartArray idx
-        | Constants.EndArray -> pos <- i + 1 ; JsonToken.EndArray idx
-        | Constants.Colon -> pos <- i + 1 ; JsonToken.Colon idx
-        | Constants.Comma -> pos <- i + 1 ; JsonToken.Comma idx
+        | 'n' when matchLiteral "null" input n &i -> JsonToken.Null idx
+        | 'f' when matchLiteral "false" input n &i -> JsonToken.False idx
+        | 't' when matchLiteral "true" input n &i -> JsonToken.True idx
+        | Constants.StartObject -> i <- i + 1 ; JsonToken.StartObject idx
+        | Constants.EndObject -> i <- i + 1 ; JsonToken.EndObject idx
+        | Constants.StartArray -> i <- i + 1 ; JsonToken.StartArray idx
+        | Constants.EndArray -> i <- i + 1 ; JsonToken.EndArray idx
+        | Constants.Colon -> i <- i + 1 ; JsonToken.Colon idx
+        | Constants.Comma -> i <- i + 1 ; JsonToken.Comma idx
         | Constants.Quote ->
             i <- i + 1
             let str = parseQuotedString input n sb &i
-            pos <- i ; JsonToken.String idx str
+            JsonToken.String idx str
 
         | _ -> 
             let str = parseUnquotedString input n sb &i
-            pos <- i ; 
             if isNumber str then JsonToken.Number idx str
             else JsonToken.String idx str
+        
+
+type JsonReader(input : string, format : IFormatProvider) =
+    let mutable pos = 0
+    let mutable isPeeked = false
+    let mutable peeked = Unchecked.defaultof<_>
+    let sb = new StringBuilder()
+
+    member __.Format = format
+
+    member __.ClearPeeked() = isPeeked <- false
+
+    member __.PeekToken() : JsonToken =
+        if isPeeked then peeked
+        else
+            let mutable i = pos
+            let tok = parseToken sb &i input
+            pos <- i
+            isPeeked <- true
+            peeked <- tok
+            tok
+
+    member __.NextToken() : JsonToken =
+        if isPeeked then
+            isPeeked <- false
+            peeked
+        else
+            let mutable i = pos
+            let tok = parseToken sb &i input
+            pos <- i
+            tok
+
 
 
 type JsonToken with
@@ -304,3 +327,10 @@ type JsonToken with
         | JsonTag.Null -> null
         | JsonTag.String -> Convert.FromBase64String tok.Value
         | _ -> unexpectedToken tok
+
+
+type JsonReader with
+    member inline reader.EnsureToken(tag) =
+        let tok = reader.NextToken()
+        if tag <> tok.Tag then
+            unexpectedToken tok

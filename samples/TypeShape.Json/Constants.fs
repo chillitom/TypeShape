@@ -1,6 +1,7 @@
-﻿namespace TypeShape.Json
+﻿namespace Vardusia
 
 module internal Constants =
+    open System
 
     let [<Literal>] Null = "null"
     let [<Literal>] NaN = "NaN"
@@ -16,4 +17,4 @@ module internal Constants =
     let [<Literal>] Comma = ','
     let [<Literal>] Quote = '"'
     let [<Literal>] Colon = ':'
-        
+    let [<Literal>] Space = ' '
