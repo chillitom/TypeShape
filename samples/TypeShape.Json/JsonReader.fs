@@ -122,16 +122,16 @@ module private JsonReaderImpl =
                     append sb (char c)
                     i <- i + 4
 
-                //| 'U' ->
-                //    if i + 9 >= n then failRead input i
-                //    let unicodeChar (s:string) =
-                //        if s.Length <> 8 then failwith "unicodeChar";
-                //        if s.[0..1] <> "00" then failwith "unicodeChar";
-                //        UnicodeHelper.getUnicodeSurrogatePair <| System.UInt32.Parse(s, NumberStyles.HexNumber) 
-                //    let lead, trail = unicodeChar (s.Substring(i+2, 8))
-                //    buf.Append(lead) |> ignore
-                //    buf.Append(trail) |> ignore
-                //    i <- i + 8  // the \ and u will also be skipped past further below
+                | 'U' ->
+                    if i + 9 >= n then failRead input i
+                    let us = input.Substring(i + 2, 8)
+                    if us.[0] <> '0' || us.[1] <> '0' then failRead input i
+                    let pnum = System.UInt32.Parse(us, NumberStyles.HexNumber)
+                    let lead,trail = getUnicodeSurrogatePair pnum
+                    append sb lead
+                    append sb trail
+                    i <- i + 8
+
                 | _ -> failRead input i
 
                 i <- i + 2
