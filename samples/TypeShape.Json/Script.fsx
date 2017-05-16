@@ -2,6 +2,7 @@
 
 open System
 open Vardusia
+open System.Reflection
 
 let json =
     JsonValue.Array 
@@ -21,6 +22,14 @@ let json =
         ]
 
 let string = json.ToJson(indent = 4)
+
+open System.Reflection
+type Foo = { A : string option ; B : int list ; FlAgs : System.Reflection.BindingFlags ; Date : DateTimeOffset ; TimeSpan : TimeSpan }
+
+let pr = Pickler.resolve<Foo>()
+
+let record = { A = Some "skata"; B = [1 .. 10] ; Date = DateTimeOffset.Now ; TimeSpan = TimeSpan.FromHours 48.1231 ; FlAgs = BindingFlags.NonPublic ||| BindingFlags.Instance }
+Pickler.pickle pr record |> Pickler.unpickle pr
 
 Console.WriteLine string
 let r = JsonValue.FromJson <| json.ToJson(indent = 4)

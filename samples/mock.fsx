@@ -110,7 +110,10 @@ and private mkMockerAux<'T> (ctx : RecTypeManager) : Mocker<'T> =
     | Shape.String -> EQ(fun mv -> getPrimMock mv "")
     | Shape.Enum s ->
         s.Accept { new IEnumVisitor<Mocker<'T>> with
-            member __.Visit<'t, 'u when 't : enum<'u>>() = // 'T = 't
+            member __.Visit<'t, 'u when 't : enum<'u>
+                                    and 't : struct
+                                    and 't :> ValueType
+                                    and 't : (new : unit -> 't)>() = // 'T = 't
                 let em = mkMockerCached<'u> ctx
                 fun size mv -> 
                     match mv with

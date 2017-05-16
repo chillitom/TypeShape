@@ -164,13 +164,19 @@ let shapeof<'T> = TypeShape.Create<'T>() :> TypeShape
 // Enum types
 
 type IEnumVisitor<'R> =
-    abstract Visit<'Enum, 'Underlying when 'Enum : enum<'Underlying>> : unit -> 'R
+    abstract Visit<'Enum, 'Underlying when 'Enum : enum<'Underlying>
+                                       and 'Enum : struct
+                                       and 'Enum :> ValueType
+                                       and 'Enum : (new : unit -> 'Enum)> : unit -> 'R
 
 type IShapeEnum =
     abstract Underlying : TypeShape
     abstract Accept : IEnumVisitor<'R> -> 'R
 
-type private ShapeEnum<'Enum, 'Underlying when 'Enum : enum<'Underlying>>() =
+type private ShapeEnum<'Enum, 'Underlying when 'Enum : enum<'Underlying>
+                                           and 'Enum : struct
+                                           and 'Enum :> ValueType
+                                           and 'Enum : (new : unit -> 'Enum)>() =
     interface IShapeEnum with
         member __.Underlying = shapeof<'Underlying>
         member __.Accept v = v.Visit<'Enum, 'Underlying> ()

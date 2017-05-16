@@ -296,7 +296,7 @@ type JsonToken with
         match tok.Tag with
         | JsonTag.String ->
             let mutable result = Unchecked.defaultof<_>
-            if TimeSpan.TryParse("G", fmt, &result) then result
+            if TimeSpan.TryParse(tok.Value, fmt, &result) then result
             else
                 unexpectedToken tok
 
