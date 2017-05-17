@@ -24,24 +24,24 @@ type JsonToken(tag : JsonTag, value : string, index : int) =
     member __.Index = index
     member __.Value = value
 
-    static member inline Null i = new JsonToken(JsonTag.Null, null, i)
-    static member inline False i = new JsonToken(JsonTag.False, null, i)
-    static member inline True i = new JsonToken(JsonTag.True, null, i)
+    static member inline Null i = new JsonToken(JsonTag.Null, "null", i)
+    static member inline False i = new JsonToken(JsonTag.False, "false", i)
+    static member inline True i = new JsonToken(JsonTag.True, "true", i)
     static member inline String i str = new JsonToken(JsonTag.String, str, i)
     static member inline Number i str = new JsonToken(JsonTag.Number, str, i)
-    static member inline Colon i = new JsonToken(JsonTag.Colon, null, i)
-    static member inline Comma i = new JsonToken(JsonTag.Comma, null, i)
-    static member inline StartObject i = new JsonToken(JsonTag.StartObject, null, i)
-    static member inline EndObject i = new JsonToken(JsonTag.EndObject, null, i)
-    static member inline StartArray i = new JsonToken(JsonTag.StartArray, null, i)
-    static member inline EndArray i = new JsonToken(JsonTag.EndArray, null, i)
-    static member inline EOF i = new JsonToken(JsonTag.EOF, null, i)
+    static member inline Colon i = new JsonToken(JsonTag.Colon, ":", i)
+    static member inline Comma i = new JsonToken(JsonTag.Comma, ",", i)
+    static member inline StartObject i = new JsonToken(JsonTag.StartObject, "{", i)
+    static member inline EndObject i = new JsonToken(JsonTag.EndObject, "}", i)
+    static member inline StartArray i = new JsonToken(JsonTag.StartArray, "[", i)
+    static member inline EndArray i = new JsonToken(JsonTag.EndArray, "]", i)
+    static member inline EOF i = new JsonToken(JsonTag.EOF, "EOF", i)
 
 [<AutoOpen>]
 module private JsonReaderImpl =
 
     let inline unexpectedToken (tok : JsonToken) =
-        sprintf "Unexpected JSON token '%O' at position %d." tok.Tag tok.Index
+        sprintf "Unexpected JSON token '%s' at position %d." tok.Value tok.Index
         |> VardusiaException
         |> raise
 

@@ -21,7 +21,7 @@
     <Optimize>false</Optimize>
     <Tailcalls>false</Tailcalls>
     <OutputPath>bin\$(Configuration)\</OutputPath>
-    <DefineConstants>TRACE;DEBUG</DefineConstants>
+    <DefineConstants>TRACE;DEBUG;TYPESHAPE_EMIT</DefineConstants>
     <WarningLevel>5</WarningLevel>
     <DocumentationFile>bin\$(Configuration)\$(AssemblyName).XML</DocumentationFile>
     <OtherFlags>--warnon:1182</OtherFlags>
@@ -31,7 +31,7 @@
     <Optimize>true</Optimize>
     <Tailcalls>true</Tailcalls>
     <OutputPath>bin\$(Configuration)\</OutputPath>
-    <DefineConstants>TRACE</DefineConstants>
+    <DefineConstants>TRACE;TYPESHAPE_EMIT</DefineConstants>
     <WarningLevel>3</WarningLevel>
     <DocumentationFile>bin\$(Configuration)\$(AssemblyName).XML</DocumentationFile>
   </PropertyGroup>
@@ -65,6 +65,10 @@
     <Compile Include="JsonWriter.fs" />
     <Compile Include="JsonReader.fs" />
     <Compile Include="JsonPickler.fs" />
+    <Compile Include="PrimitivePicklers.fs" />
+    <Compile Include="GenericPicklers.fs" />
+    <Compile Include="PicklerGeneration.fs" />
+    <Compile Include="Vardusia.fs" />
     <Compile Include="JsonValue.fs" />
     <None Include="Script.fsx" />
     <Content Include="packages.config" />

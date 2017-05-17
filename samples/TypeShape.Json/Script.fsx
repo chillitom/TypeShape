@@ -1,4 +1,4 @@
-﻿#r "bin/Debug/Vardusia.dll"
+﻿#r "bin/Release/Vardusia.dll"
 
 open System
 open Vardusia
@@ -28,12 +28,14 @@ type Foo = { A : string option ; B : int list ; FlAgs : System.Reflection.Bindin
 
 type Tree = { Value : int ; Nested : Tree option }
 
-let pr = Pickler.resolve<Tree>()
+let pr = Pickler.auto<Tree>
 
 Pickler.pickle pr { Value = 2 ; Nested = Some { Value = 2 ; Nested = None } }
 
+let pr2 = Pickler.auto<Foo>
+
 let record = { A = Some "skata"; B = [1 .. 10] ; Date = DateTimeOffset.Now ; TimeSpan = TimeSpan.FromHours 48.1231 ; FlAgs = BindingFlags.NonPublic ||| BindingFlags.Instance }
-Pickler.pickle pr record |> Pickler.unpickle pr
+Pickler.pickle pr2 record |> Pickler.unpickle pr2
 
 Console.WriteLine string
 let r = JsonValue.FromJson <| json.ToJson(indent = 4)
