@@ -143,7 +143,7 @@ type FSharpOptionPickler<'T>(pickler : JsonPickler<'T>) =
             | JsonTag.Null -> reader.ClearPeeked(); None
             | _ -> pickler.UnPickle reader |> Some
 
-type EnumPickler<'Enum, 'U when 'Enum : enum<'U>>(upickler : JsonPickler<'U>) =
+type EnumIntPickler<'Enum, 'U when 'Enum : enum<'U>>(upickler : JsonPickler<'U>) =
     interface JsonPickler<'Enum> with
         member __.Pickle writer enum = 
             let u = LanguagePrimitives.EnumToValue enum
@@ -423,7 +423,7 @@ module private Bar =
         | Shape.FSharpRecord (:? ShapeFSharpRecord<'T> as shape) ->
             FSharpRecordPickler<'T>(resolver, shape) |> EQ
 
-        | _ -> failwithf "Unsupported type '%O'" typeof<'T>
+        | _ -> raise <| UnsupportedShape(typeof<'T>)
 
 
 module Pickler =

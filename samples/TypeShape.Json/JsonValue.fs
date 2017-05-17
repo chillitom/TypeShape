@@ -70,7 +70,7 @@ module private JsonValueImpl =
     let parseJson (reader : JsonReader) =
         let mutable arrBuff = Unchecked.defaultof<ResizeArray<JsonExpr>>
         let mutable recBuf = Unchecked.defaultof<ResizeArray<KeyValuePair<string, JsonExpr>>>
-        let inline error (tag : JsonTag) = failwithf "Unexpected JSON tag %O" tag
+        //let inline error (tag : JsonTag) = failwithf "Unexpected JSON tag %O" tag
 
         let rec parse (token : JsonToken) =
             match token.Tag with
@@ -96,16 +96,16 @@ module private JsonValueImpl =
                         let value = parse token
                         agg.Add value
 
-                    | t -> error t
+                    | _ -> unexpectedToken token
 
                 Array(agg.ToArray())
 
             | JsonTag.StartObject ->
                 let inline parseField (token : JsonToken) =
-                    if token.Tag <> JsonTag.String then error token.Tag
+                    if token.Tag <> JsonTag.String then unexpectedToken token
                     let field = token.Value
                     let token = reader.NextToken()
-                    if token.Tag <> JsonTag.Colon then error token.Tag
+                    if token.Tag <> JsonTag.Colon then unexpectedToken token
                     let token = reader.NextToken()
                     let value = parse token
                     KeyValuePair(field, value)
@@ -126,11 +126,11 @@ module private JsonValueImpl =
                         let field = parseField token
                         agg.Add field
 
-                    | t -> error t
+                    | _ -> unexpectedToken token
 
                 Object(agg.ToArray())
 
-            | t -> error t
+            | _ -> unexpectedToken token
 
         parse (reader.NextToken())
 

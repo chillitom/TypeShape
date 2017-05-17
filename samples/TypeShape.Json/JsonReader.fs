@@ -39,13 +39,16 @@ type JsonToken(tag : JsonTag, value : string, index : int) =
 
 [<AutoOpen>]
 module private JsonReaderImpl =
-    open Constants
 
     let inline unexpectedToken (tok : JsonToken) =
-        failwithf "Unexpected JSON token '%O' at position %d" tok.Tag tok.Index
+        sprintf "Unexpected JSON token '%O' at position %d." tok.Tag tok.Index
+        |> VardusiaException
+        |> raise
 
     let inline failRead (input : string) (pos : int) =
-        failwithf "Invalid JSON string '%s'" input.[max (pos - 3) 0 .. min (pos + 3) (input.Length - 1)]
+        sprintf "Invalid JSON string '%s'." input.[max (pos - 3) 0 .. min (pos + 3) (input.Length - 1)]
+        |> VardusiaException
+        |> raise
 
     let inline skipWhiteSpace (input : string) (n : int) (i : byref<int>) =
         while i < n && Char.IsWhiteSpace(input.[i]) do i <- i + 1

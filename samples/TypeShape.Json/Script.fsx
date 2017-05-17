@@ -21,12 +21,16 @@ let json =
             JsonValue.String """{ "some" : "json", "here" : true }""" 
         ]
 
-let string = json.ToJson(indent = 4)
+let string = json.ToJson(indent = 4) |> JsonValue.FromJson
 
 open System.Reflection
 type Foo = { A : string option ; B : int list ; FlAgs : System.Reflection.BindingFlags ; Date : DateTimeOffset ; TimeSpan : TimeSpan }
 
-let pr = Pickler.resolve<Foo>()
+type Tree = { Value : int ; Nested : Tree option }
+
+let pr = Pickler.resolve<Tree>()
+
+Pickler.pickle pr { Value = 2 ; Nested = Some { Value = 2 ; Nested = None } }
 
 let record = { A = Some "skata"; B = [1 .. 10] ; Date = DateTimeOffset.Now ; TimeSpan = TimeSpan.FromHours 48.1231 ; FlAgs = BindingFlags.NonPublic ||| BindingFlags.Instance }
 Pickler.pickle pr record |> Pickler.unpickle pr
@@ -102,3 +106,30 @@ let dict' = new Dictionary<StructU, int>()
 for i = 1 to 10000000 do
     let value = screate (int64 i)
     dict'.Add(value, i)
+
+
+
+#time "on"
+
+open FSharp.NativeInterop
+
+let n = 5000000
+let string = String(' ', n)
+
+let test1 () =
+    let string = string
+    let mutable x = 0
+    for i = 0 to n - 1 do
+        x <- x + int string.[i]
+    x
+
+let test2 () =
+    let string = string
+    let mutable x = 0
+    use ptr = fixed string
+    for i = 0 to n - 1 do 
+        x <- x + int (NativePtr.get ptr i)
+    x
+
+for i = 1 to 100 do test1() |> ignore
+for i = 1 to 100 do test2() |> ignore

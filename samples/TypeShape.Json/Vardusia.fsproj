@@ -61,6 +61,7 @@
     <Compile Include="..\..\src\TypeShape\TypeShape.fs" />
     <Compile Include="Constants.fs" />
     <Compile Include="Utils.fs" />
+    <Compile Include="Types.fs" />
     <Compile Include="JsonWriter.fs" />
     <Compile Include="JsonReader.fs" />
     <Compile Include="JsonPickler.fs" />
