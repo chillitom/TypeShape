@@ -98,6 +98,9 @@ let generatePickler<'T> (resolver : IPicklerResolver) : JsonPickler<'T> =
     | Shape.FSharpRecord (:? ShapeFSharpRecord<'T> as shape) ->
         mkRecordShapePickler<'T> resolver shape.CreateUninitialized shape.Fields |> EQ
 
+    | Shape.FSharpUnion (:? ShapeFSharpUnion<'T> as shape) ->
+        mkFSharpUnionPickler<'T> resolver None shape |> EQ
+
     | Shape.CliMutable (:? ShapeCliMutable<'T> as shape) ->
         mkRecordShapePickler<'T> resolver shape.CreateUninitialized shape.Properties |> EQ
 

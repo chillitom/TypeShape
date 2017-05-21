@@ -31,6 +31,7 @@ type Tree = { Value : int ; Nested : Tree option }
 let pr = Pickler.auto<Tree>
 
 Pickler.pickle pr { Value = 2 ; Nested = Some { Value = 2 ; Nested = None } }
+|> Pickler.unpickle pr2
 
 let pr2 = Pickler.auto<Foo>
 
@@ -39,6 +40,25 @@ Pickler.pickle pr2 record |> Pickler.unpickle pr2
 
 Console.WriteLine string
 let r = JsonValue.FromJson <| json.ToJson(indent = 4)
+
+type Union =
+    | A
+    | B of foo:int * bar:string
+    | C of byte[]
+
+
+let up = Pickler.auto<Union list>
+
+Pickler.pickle up [A;A; B(2,"foo") ; C [|1uy .. 10uy|]]
+|> Pickler.unpickle up
+
+type P =
+    | Z
+    | S of next:P
+
+let pp = Pickler.auto<P list>
+
+[Z ; S (S Z)] |> Pickler.pickle pp
 
 match r with
 | JsonValue.Element 0 (JsonValue.Field "bar" x) -> Some x

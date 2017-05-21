@@ -337,3 +337,21 @@ type JsonReader with
         let tok = reader.NextToken()
         if tag <> tok.Tag then
             unexpectedToken tok
+        tok
+
+    member inline reader.ConsumeValue() =
+        let tok = reader.NextToken()
+        match tok.Tag with
+        | JsonTag.StartArray
+        | JsonTag.StartObject ->
+            let mutable depth = 1
+            while depth > 0 do
+                let tok = reader.NextToken()
+                match tok.Tag with
+                | JsonTag.StartArray
+                | JsonTag.StartObject -> depth <- depth + 1
+                | JsonTag.EndArray
+                | JsonTag.EndObject -> depth <- depth - 1
+                | _ -> ()
+
+        | _ -> ()
