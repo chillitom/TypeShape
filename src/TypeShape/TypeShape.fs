@@ -1546,6 +1546,8 @@ and ShapeCliMutable<'Record> private (defaultCtor : ConstructorInfo) =
 
     /// Property shapes for C# record
     member __.Properties = properties
+    /// Gets the default constructor info defined in the type
+    member __.DefaultCtorInfo = defaultCtor
 
     interface IShapeCliMutable with
         member __.Properties = properties |> Array.map (fun p -> p :> _)
@@ -2163,7 +2165,7 @@ module Shape =
     /// Recognizes shapes that look like C# record classes
     /// They are classes with parameterless constructors and settable properties
     let (|CliMutable|_|) (s : TypeShape) =
-        match s.Type.GetConstructor(BindingFlags.Public ||| BindingFlags.Instance, null, [||], [||]) with
+        match s.Type.GetConstructor(allInstanceMembers, null, [||], [||]) with
         | null -> None
         | ctor -> 
             Activator.CreateInstanceGeneric<ShapeCliMutable<_>>([|s.Type|], [|ctor|])

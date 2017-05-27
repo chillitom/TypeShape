@@ -24,6 +24,16 @@ let json =
             JsonValue.String """{ "some" : "json", "here" : true }""" 
         ]
 
+let cacheB = new PicklerCacheBuilder()
+
+cacheB.TryRegister(fun r -> printfn "askaa" ; r.Resolve<int>())
+
+let cache = cacheB.ToPicklerCache()
+
+cache.Resolve<int>()
+
+cache.Resolve<int>()
+
 JsonValue.Array([]).ToJson(indent = Indent.Spaces 2)
 json.ToJson(indent = Indent.Spaces 2) |> printfn "%s"
 let string = json.ToJson(indent = Indent.Compact) |> JsonValue.FromJson
@@ -37,7 +47,7 @@ let pr = Pickler.auto<Tree>
 
 let serializer = new JsonSerializer()
 
-serializer.Pickle({ Value = 2 ; Nested = Some { Value = 2 ; Nested = None } }, indent = Indent.Compact)
+serializer.Pickle({ Value = 2 ; Nested = Some { Value = 2 ; Nested = None } }, indent = Indent.Spaces 2)
 
 Pickler.pickle pr { Value = 2 ; Nested = Some { Value = 2 ; Nested = None } }
 |> Pickler.unpickle pr
@@ -56,7 +66,7 @@ type Union =
     | C of byte[]
 
 
-let up = Pickler.auto<Union list>
+let up = Pickler.auto<Union>
 
 Pickler.pickle up [A;A; B(2,"foo") ; C [|1uy .. 10uy|]]
 |> Pickler.unpickle up

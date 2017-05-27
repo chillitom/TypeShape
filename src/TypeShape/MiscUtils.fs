@@ -128,8 +128,20 @@ type RecTypeManager internal (parentCache : TypeCache option) =
             | None -> ()
 
 /// Thread-safe cache of values indexed by type.
-and TypeCache() =
-    let dict = new ConcurrentDictionary<Type, obj>()
+and TypeCache internal (dict : ConcurrentDictionary<Type, obj>) =
+
+    new () = TypeCache(new ConcurrentDictionary<_,_>())
+
+    /// Total number of items in cache
+    member __.Count = dict.Count
+    /// Checks whether the supplied type is contained in cache
+    member __.ContainsKey<'T>() = dict.ContainsKey typeof<'T>
+    /// Checks whether the supplied type is contained in cache
+    member __.ContainsKey(t : Type) = dict.ContainsKey t
+    /// Gets all types registered in the cache
+    member __.Keys = dict.Keys
+    /// Gets all values registered in the cache
+    member __.Values = dict.Values
 
     /// Try looking up cached value by type
     member __.TryGetValue<'T>(result : byref<'T>) : bool =
@@ -162,6 +174,9 @@ and TypeCache() =
     /// Try adding value for given type
     member __.TryAdd<'T>(value : 'T) = dict.TryAdd(typeof<'T>, value)
 
+    /// Forces update for value of given type
+    member __.ForceAdd<'T>(value : 'T) = dict.[typeof<'T>] <- value
+
     /// Gets or adds value for given type using supplied factory.
     /// Uses optimistic concurrency
     member __.GetOrAdd<'T>(factory : unit -> 'T) : 'T =
@@ -181,6 +196,10 @@ and TypeCache() =
 
         | _ -> invalidArg "manager" "RecTypeManager does not belong to TypeCache context."
 
+    /// Creates a clone of the current cache items
+    member __.Clone() =
+        let dict2 = new ConcurrentDictionary<Type, obj>(dict)
+        new TypeCache(dict2)
 
 /// Provides a binary search implementation for generic values
 type BinSearch<'T when 'T : comparison>(inputs : 'T[]) =

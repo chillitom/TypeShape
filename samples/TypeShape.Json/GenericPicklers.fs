@@ -34,9 +34,10 @@ type EnumIntPickler<'Enum, 'U when 'Enum : enum<'U>>(upickler : JsonPickler<'U>)
             let u = upickler.UnPickle reader
             LanguagePrimitives.EnumOfValue u
 
-type EnumStringPickler<'Enum when 'Enum : struct
-                              and 'Enum :> ValueType
-                              and 'Enum : (new : unit -> 'Enum)>() =
+type EnumStringPickler<'Enum, 'U when 'Enum : struct
+                                 and 'Enum :> ValueType
+                                 and 'Enum : enum<'U>
+                                 and 'Enum : (new : unit -> 'Enum)>() =
 
     interface JsonPickler<'Enum> with
         member __.Pickle writer enum =
@@ -62,12 +63,12 @@ type NullablePickler<'T when 'T : struct
         member __.UnPickle reader =
             let tok = reader.PeekToken()
             match tok.Tag with
-            | JsonTag.Null -> Nullable()
+            | JsonTag.Null -> let _ = reader.NextToken() in Nullable()
             | _ -> pickler.UnPickle reader |> Nullable
 
 
-let inline mkCollectionPickler<'Collection, 'T when 'Collection :> seq<'T>> (tpickler : JsonPickler<'T>) (ctor : ResizeArray<'T> -> 'Collection) =
-    { new JsonPickler<'Collection> with
+type CollectionPickler<'Collection, 'T when 'Collection :> seq<'T>> (ctor : ResizeArray<'T> -> 'Collection, tpickler : JsonPickler<'T>) =
+    interface JsonPickler<'Collection> with
         member __.Pickle writer ts =
             writer.StartArray()
             for t in ts do tpickler.Pickle writer t
@@ -83,13 +84,16 @@ let inline mkCollectionPickler<'Collection, 'T when 'Collection :> seq<'T>> (tpi
                 tok <- reader.PeekToken() 
 
             let _ = reader.NextToken()
-            ctor ra }
+            ctor ra
+
+let mkResizeArrayPickler t = CollectionPickler<ResizeArray<'T>, 'T>(id, t)
+let mkArrayPickler t = CollectionPickler<'T [], 'T>((fun ra -> ra.ToArray()), t)
+let mkListPickler t = CollectionPickler<'T list, 'T>(List.ofSeq, t)
+let mkSetPickler t = CollectionPickler<Set<'T>, 'T>(Set.ofSeq, t)
 
 type JsonField<'Value> = KeyValuePair<string, 'Value>
-let inline mkDictionaryPickler<'Dict, 'Value when 'Dict :> seq<JsonField<'Value>>> 
-    (vpickler : JsonPickler<'Value>) (ctor : ResizeArray<JsonField<'Value>> -> 'Dict) =
-
-    { new JsonPickler<'Dict> with
+type DictionaryPickler<'Dict, 'Value when 'Dict :> seq<JsonField<'Value>>> (ctor : ResizeArray<JsonField<'Value>> -> 'Dict, vpickler : JsonPickler<'Value>) =
+    interface JsonPickler<'Dict> with
         member __.Pickle writer map =
             writer.StartObject()
             for kv in map do
@@ -108,13 +112,26 @@ let inline mkDictionaryPickler<'Dict, 'Value when 'Dict :> seq<JsonField<'Value>
                 ra.Add(KeyValuePair(key, value))
                 tok <- reader.NextToken() 
                 
-            ctor ra }
+            ctor ra
 
-type IFieldPickler<'T> =
+let mkMapPickler vpickler =
+    let mkMap (kvs : ResizeArray<KeyValuePair<_,_>>) =
+        kvs |> Seq.map (fun kv -> kv.Key, kv.Value) |> Map.ofSeq
+    DictionaryPickler<Map<string,'v>, 'v>(mkMap, vpickler)
+
+let mkDictPickler vpickler =
+    let mkDict (kvs : ResizeArray<KeyValuePair<_,_>>) =
+        let d = new Dictionary<string, 'v>()
+        for kv in kvs do d.[kv.Key] <- kv.Value
+        d
+
+    DictionaryPickler<Dictionary<string, 'v>, 'v>(mkDict, vpickler)
+
+type private IFieldPickler<'T> =
     abstract Pickle : JsonWriter -> 'T -> unit
     abstract UnPickle : JsonReader -> 'T -> 'T
 
-let mkFieldPickler (resolver : IPicklerResolver) (shapeField : IShapeWriteMember<'T>) =
+let private mkFieldPickler (resolver : IPicklerResolver) (shapeField : IShapeWriteMember<'T>) =
     shapeField.Accept { new IWriteMemberVisitor<'T, IFieldPickler<'T>> with
         member __.Visit(shape : ShapeWriteMember<'T, 'Field>) =
             let fp = resolver.Resolve<'Field>()
@@ -130,15 +147,16 @@ let mkFieldPickler (resolver : IPicklerResolver) (shapeField : IShapeWriteMember
                     shape.Inject t field }
     }
 
-let mkFieldPicklers resolver (fields : seq<IShapeWriteMember<'T>>) =
+let private mkFieldPicklers resolver (fields : seq<IShapeWriteMember<'T>>) =
     let fields = Seq.toArray fields
     fields |> Array.map (fun f -> f.Label, mkFieldPickler resolver f)
 
-let inline mkRecordShapePickler<'TRecord> (resolver : IPicklerResolver) (ctor : unit -> 'TRecord) (fields : IShapeWriteMember<'TRecord>[]) =
+
+type RecordPickler<'TRecord> (resolver : IPicklerResolver, ctor : unit -> 'TRecord, fields : IShapeWriteMember<'TRecord>[]) =
     let labels, picklers = mkFieldPicklers resolver fields |> Array.unzip
     let index = BinSearch labels
 
-    { new JsonPickler<'TRecord> with
+    interface JsonPickler<'TRecord> with
         member __.Pickle writer record =
             writer.StartObject()
             for p in picklers do p.Pickle writer record
@@ -156,54 +174,76 @@ let inline mkRecordShapePickler<'TRecord> (resolver : IPicklerResolver) (ctor : 
 
                 tok <- reader.NextToken()
 
-            record }
+            record
 
-// TODO : check what strings make valid json field names
-let mkFSharpUnionPickler<'TUnion> (resolver : IPicklerResolver) (tagId : string option) (shape : ShapeFSharpUnion<'TUnion>) =
-    let lookups, picklerss, tags = 
+let [<Literal>] private unionCaseKey = "case"
+let [<Literal>] private unionFieldsKey = "fields"
+
+type FSharpUnionPickler<'TUnion> (resolver : IPicklerResolver, shape : ShapeFSharpUnion<'TUnion>) =
+    let labelss, picklerss, tags = 
         shape.UnionCases 
-        |> Array.map (fun c -> c.Fields |> Array.map (fun c -> c.Label) |> BinSearch, c.Fields |> Array.map (mkFieldPickler resolver), c.CaseInfo.Name)
+        |> Array.map (fun c -> 
+            let labels = c.Fields |> Array.map (fun c -> c.Label) |> BinSearch
+            let picklers = c.Fields |> Array.map (mkFieldPickler resolver)
+            labels, picklers, c.CaseInfo.Name)
         |> Array.unzip3
 
-    let lookup = BinSearch tags
-    let tagId = defaultArg tagId "__case"
+    let caseIndex = BinSearch tags
 
-    { new JsonPickler<'TUnion> with
+    interface JsonPickler<'TUnion> with
         member __.Pickle writer union =
             writer.StartObject()
             let tag = shape.GetTag union
-            writer.Key tagId
+            let picklers = picklerss.[tag]
+            writer.Key unionCaseKey
             writer.String tags.[tag]
 
-            let picklers = picklerss.[tag]
-            for p in picklers do p.Pickle writer union
+            if picklers.Length > 0 then
+                writer.Key unionFieldsKey
+                writer.StartObject()
+                for p in picklers do p.Pickle writer union
+                writer.EndObject()
+
             writer.EndObject()
 
         member __.UnPickle reader =
             let _ = reader.EnsureToken JsonTag.StartObject
             let mutable tok = reader.EnsureToken JsonTag.Key
-            if tok.Value <> tagId then
-                sprintf "JSON Union objects must begin with a '%s' field" tagId
+            if tok.Value <> unionCaseKey then
+                sprintf "JSON Union objects must begin with a '%s' field" unionCaseKey
                 |> VardusiaException
                 |> raise
 
             tok <- reader.EnsureToken JsonTag.String
 
-            match lookup.TryFindIndex tok.Value with
-            | tag when tag < 0 -> raise <| VardusiaException (sprintf "Unrecognized union case '%s'" tok.Value)
+            match caseIndex.TryFindIndex tok.Value with
+            | tag when tag < 0 -> 
+                sprintf "Unrecognized union case '%s' at position %d" tok.Value tok.Position
+                |> VardusiaException
+                |> raise
+
             | tag ->
 
-            let lookup = lookups.[tag]
+            let labels = labelss.[tag]
             let picklers = picklerss.[tag]
             let mutable record = shape.UnionCases.[tag].CreateUninitialized()
+            
+            if picklers.Length = 0 then record else
 
+            tok <- reader.EnsureToken JsonTag.Key
+            if tok.Value <> unionFieldsKey then
+                sprintf "Nontrivial JSON Union objects must specify a '%s' object" unionFieldsKey
+                |> VardusiaException
+                |> raise
+
+            let _ = reader.EnsureToken JsonTag.StartObject
             tok <- reader.NextToken()
             while tok.Tag <> JsonTag.EndObject do
                 let label = tok.AsKey()
-                match lookup.TryFindIndex label with
+                match labels.TryFindIndex label with
                 | i when i >= 0 -> record <- picklers.[i].UnPickle reader record
                 | _ -> reader.ConsumeValue()
 
                 tok <- reader.NextToken()
 
-            record }
+            record

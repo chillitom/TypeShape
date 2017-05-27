@@ -9,8 +9,12 @@ open TypeShape_Utils
 open Vardusia.PrimitivePicklers
 open Vardusia.GenericPicklers
 
-let generatePickler<'T> (resolver : IPicklerResolver) : JsonPickler<'T> =
+let generatePickler<'T> (resolver : IPicklerResolver) (picklerFactories : TypeCache) : JsonPickler<'T> =
     let EQ (jp : JsonPickler<'a>) = unbox<JsonPickler<'T>> jp
+
+    let mutable factory = Unchecked.defaultof<IPicklerResolver -> JsonPickler<'T>>
+    if picklerFactories.TryGetValue(&factory) then factory resolver else
+
     match shapeof<'T> with
     | Shape.Unit -> UnitPickler<unit>(()) |> EQ
     | Shape.Byte -> BytePickler() |> EQ
@@ -34,7 +38,7 @@ let generatePickler<'T> (resolver : IPicklerResolver) : JsonPickler<'T> =
                                     and 'e :> ValueType
                                     and 'e : (new : unit -> 'e)> () =
 
-                        EnumStringPickler<'e>() |> EQ }
+                        EnumStringPickler<'e, 'u>() |> EQ }
 
     | Shape.Nullable s ->
         s.Accept { new INullableVisitor<JsonPickler<'T>> with
@@ -55,64 +59,56 @@ let generatePickler<'T> (resolver : IPicklerResolver) : JsonPickler<'T> =
         s.Accept { new IArrayVisitor<JsonPickler<'T>> with
             member __.Visit<'t> _ =
                 let tpickler = resolver.Resolve<'t>()
-                mkCollectionPickler<'t[], 't> tpickler (fun t -> t.ToArray()) |> EQ }
+                mkArrayPickler tpickler  |> EQ }
 
     | Shape.FSharpList s ->
         s.Accept { new IFSharpListVisitor<JsonPickler<'T>> with
             member __.Visit<'t> () =
                 let tpickler = resolver.Resolve<'t>()
-                mkCollectionPickler<'t list, 't> tpickler Seq.toList |> EQ }
+                mkListPickler tpickler |> EQ }
 
     | Shape.ResizeArray s ->
         s.Accept { new IResizeArrayVisitor<JsonPickler<'T>> with
             member __.Visit<'t> () =
                 let tpickler = resolver.Resolve<'t>()
-                mkCollectionPickler<ResizeArray<'t>, 't> tpickler id |> EQ }
+                mkResizeArrayPickler tpickler |> EQ }
 
     | Shape.FSharpSet s ->
         s.Accept { new IFSharpSetVisitor<JsonPickler<'T>> with
             member __.Visit<'t when 't : comparison> () =
                 let tpickler = resolver.Resolve<'t>()
-                mkCollectionPickler<Set<'t>, 't> tpickler Set.ofSeq |> EQ }
+                mkSetPickler tpickler |> EQ }
 
     | Shape.Dictionary s when s.Key = shapeof<string> ->
         s.Accept { new IDictionaryVisitor<JsonPickler<'T>> with
             member __.Visit<'k,'v when 'k : equality> () =
                 let vpickler = resolver.Resolve<'v>()
-                let mkDict (items : seq<KeyValuePair<_,_>>) =
-                    let d = Dictionary<string, 'v>()
-                    for kv in items do d.[kv.Key] <- kv.Value
-                    d
-
-                mkDictionaryPickler<Dictionary<string,'v>, 'v> vpickler mkDict |> EQ }
+                mkDictPickler vpickler |> EQ }
 
     | Shape.FSharpMap s when s.Key = shapeof<string> ->
         s.Accept { new IFSharpMapVisitor<JsonPickler<'T>> with
             member __.Visit<'k,'v when 'k : comparison> () =
                 let vpickler = resolver.Resolve<'v>()
-                let mkMap (items : seq<KeyValuePair<_,_>>) =
-                    items |> Seq.map (fun kv -> kv.Key,kv.Value) |> Map.ofSeq
-
-                mkDictionaryPickler<Map<string,'v>, 'v> vpickler mkMap |> EQ }
+                mkMapPickler vpickler |> EQ }
 
     | Shape.FSharpRecord (:? ShapeFSharpRecord<'T> as shape) ->
-        mkRecordShapePickler<'T> resolver shape.CreateUninitialized shape.Fields |> EQ
+        RecordPickler<'T>(resolver, shape.CreateUninitialized, shape.Fields) |> EQ
 
     | Shape.FSharpUnion (:? ShapeFSharpUnion<'T> as shape) ->
-        mkFSharpUnionPickler<'T> resolver None shape |> EQ
+        FSharpUnionPickler<'T>(resolver, shape) |> EQ
 
     | Shape.CliMutable (:? ShapeCliMutable<'T> as shape) ->
-        mkRecordShapePickler<'T> resolver shape.CreateUninitialized shape.Properties |> EQ
+        RecordPickler<'T>(resolver, shape.CreateUninitialized, shape.Properties) |> EQ
 
-    | _ -> raise <| UnsupportedShape(typeof<'T>)
+    | _ -> raise <| NonSerializableTypeException(typeof<'T>)
 
 
-let resolve<'T> (cache : TypeCache) : JsonPickler<'T> =
+let resolve<'T> (cache : TypeCache) (picklerFactories : TypeCache) : JsonPickler<'T> =
     let mutable p = Unchecked.defaultof<JsonPickler<'T>>
     if cache.TryGetValue(&p) then p
     else
-        let ctx = cache.CreateRecTypeManager()
-        let rec self =
+        use ctx = cache.CreateRecTypeManager()
+        let rec resolver =
             { new IPicklerResolver with 
                 member __.Resolve<'t>() =
                     match ctx.TryFind<JsonPickler<'t>>() with
@@ -124,7 +120,7 @@ let resolve<'T> (cache : TypeCache) : JsonPickler<'T> =
                                 member __.UnPickle reader = cell.Value.UnPickle reader })
                         |> ignore
 
-                        let p = generatePickler<'t> self
+                        let p = generatePickler<'t> resolver picklerFactories
                         ctx.Complete p }
 
-        self.Resolve<'T> ()
+        resolver.Resolve<'T> ()

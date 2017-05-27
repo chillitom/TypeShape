@@ -3,24 +3,44 @@
 open System
 open System.Globalization
 
+open TypeShape
 open TypeShape_Utils
 
 open Vardusia.PrimitivePicklers
+open Vardusia.GenericPicklers
 open Vardusia.PicklerGeneration
 
-type PicklerCache() =
+type PicklerCacheBuilder() =
+    let factories = new TypeCache()
+    member internal __.Factories = factories
+    member __.Count = factories.Count
+    member __.Types = factories.Keys
+    member __.Register(generator : IPicklerResolver -> JsonPickler<'T>) = factories.ForceAdd generator
+    member __.TryRegister(generator : IPicklerResolver -> JsonPickler<'T>) = factories.TryAdd generator
+    member __.IsFactoryRegistered<'T>() = factories.ContainsKey<IPicklerResolver -> JsonPickler<'T>>()
+
+    member pcb.TryRegister(pickler : JsonPickler<'T>) = pcb.TryRegister(fun _ -> pickler)
+    member pcb.Register(generator : JsonPickler<'T>) = pcb.Register (fun _ -> generator)
+    member pcb.ToPicklerCache() = new PicklerCache(pcb)
+    member pcb.IsFactoryRegistered(t : Type) = 
+        TypeShape.Create(t).Accept { 
+            new ITypeShapeVisitor<bool> with 
+                member __.Visit<'T>() = 
+                    pcb.IsFactoryRegistered<IPicklerResolver -> JsonPickler<'T>>() }
+
+
+and PicklerCache(?builder : PicklerCacheBuilder) =
     let cache = new TypeCache()
+    let picklerFactories = match builder with None -> new TypeCache() | Some b -> b.Factories.Clone()
+
     static let defaultCache = new PicklerCache()
 
-    member __.Register(pickler : JsonPickler<'T>) = cache.TryAdd pickler
-    member __.Register(generator : IPicklerGenerator<'T>) =
-        let pickler = generator.Generate __
-        __.Register pickler
-
-    member __.Resolve<'T> () = resolve<'T> cache
+    member __.TotalPicklers = cache.Count
+    member __.PicklerTypes = cache.Keys
+    member __.Resolve<'T> () = resolve<'T> cache picklerFactories
 
     interface IPicklerResolver with
-        member __.Resolve<'T> () = resolve<'T> cache
+        member __.Resolve<'T> () = __.Resolve<'T> ()
 
     static member internal DefaultCache = defaultCache
 
@@ -55,4 +75,51 @@ module Pickler =
     let pickle (pickler : JsonPickler<'T>) (value : 'T) : string = serializer.Pickle(value, pickler = pickler)
     let unpickle (pickler : JsonPickler<'T>) (json : string) : 'T = serializer.UnPickle(json, pickler = pickler)
 
-    let int = Int32Pickler() :> JsonPickler<int>
+    let unit = UnitPickler<unit>() :> JsonPickler<_>
+
+    let bool = BoolPickler() :> JsonPickler<_>
+    let byte = BytePickler() :> JsonPickler<_>
+    let sbyte = SBytePickler() :> JsonPickler<_>
+
+    let uint16   = UInt16Pickler() :> JsonPickler<_>
+    let uint     = UInt32Pickler() :> JsonPickler<_>
+    let uint64   = UInt64Pickler() :> JsonPickler<_>
+
+    let int16   = Int16Pickler() :> JsonPickler<_>
+    let int     = Int32Pickler() :> JsonPickler<_>
+    let int64   = Int64Pickler() :> JsonPickler<_>
+
+    let timespan = TimeSpanPickler() :> JsonPickler<_>
+    let datetime = DateTimePickler() :> JsonPickler<_>
+    let datetimeOffset = DateTimeOffsetPickler() :> JsonPickler<_>
+
+    let option t = FSharpOptionPickler<'T>(t) :> JsonPickler<_>
+    let nullable t = NullablePickler<'T>(t) :> JsonPickler<_>
+    let enum () = EnumStringPickler<'T,_>() :> JsonPickler<_>
+
+    let array t = mkArrayPickler t :> JsonPickler<_>
+    let list t = mkListPickler t :> JsonPickler<_>
+    let map t = mkMapPickler t :> JsonPickler<_>
+    let set t = mkSetPickler t :> JsonPickler<_>
+
+    let wrap f g p = IsomorphismPickler<'T, 'S>(f,g,p) :> JsonPickler<_>
+
+    let createUninitialized<'T> () =
+        let pRef = ref Unchecked.defaultof<JsonPickler<'T>>
+        let inline read() =
+            match pRef.Value with
+            | p when obj.ReferenceEquals(p, null) ->
+                sprintf "Recursive pickler for type '%O' has not been initialized" typeof<'T> |> invalidOp
+            | p -> p
+
+        let pickler = 
+            { new JsonPickler<'T> with
+                member __.Pickle writer t = read().Pickle writer t
+                member __.UnPickle reader = read().UnPickle reader }
+
+        pRef, pickler
+
+    let Y (f : JsonPickler<'T> -> JsonPickler<'T>) : JsonPickler<'T> =
+        let pRef, p = createUninitialized<'T>()
+        pRef := f p
+        p

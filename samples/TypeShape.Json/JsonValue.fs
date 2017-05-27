@@ -214,6 +214,7 @@ type JsonValue with
 
 
 [<RequireQualifiedAccess>]
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module JsonValue =
 
     let (|Null|Bool|Number|String|Array|Object|) (json : JsonValue) =
