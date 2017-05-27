@@ -9,6 +9,7 @@ type Indent =
     | None      =  0
 
 [<RequireQualifiedAccess>]
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Indent =
 
     let Spaces (spaces : int) = enum<Indent> spaces
