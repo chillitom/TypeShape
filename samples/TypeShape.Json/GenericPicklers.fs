@@ -21,7 +21,7 @@ type FSharpOptionPickler<'T>(pickler : JsonPickler<'T>) =
         member __.UnPickle reader =
             let tok = reader.PeekToken()
             match tok.Tag with
-            | JsonTag.Null -> reader.ClearPeeked(); None
+            | JsonTag.Null -> let _ = reader.NextToken() in None
             | _ -> pickler.UnPickle reader |> Some
 
 type EnumIntPickler<'Enum, 'U when 'Enum : enum<'U>>(upickler : JsonPickler<'U>) =
@@ -84,18 +84,13 @@ let inline mkCollectionPickler<'Collection, 'T when 'Collection :> seq<'T>> (tpi
             let _ = reader.EnsureToken JsonTag.StartArray
             let ra = ResizeArray<'T>()
             let mutable tok = reader.PeekToken()
-            if tok.Tag <> JsonTag.EndArray then
+            while tok.Tag <> JsonTag.EndArray do
                 let t = tpickler.UnPickle reader
                 ra.Add t
-                tok <- reader.NextToken()
+                tok <- reader.PeekToken() 
 
-            while tok.Tag = JsonTag.Comma do
-                let t = tpickler.UnPickle reader
-                ra.Add t
-                tok <- reader.NextToken()
-
-            if tok.Tag <> JsonTag.EndArray then unexpectedToken tok
-            else ctor ra }
+            let _ = reader.NextToken()
+            ctor ra }
 
 type JsonField<'Value> = KeyValuePair<string, 'Value>
 let inline mkDictionaryPickler<'Dict, 'Value when 'Dict :> seq<JsonField<'Value>>> 
@@ -120,27 +115,15 @@ let inline mkDictionaryPickler<'Dict, 'Value when 'Dict :> seq<JsonField<'Value>
 
         member __.UnPickle reader =
             let _ = reader.EnsureToken JsonTag.StartObject
-            let ra = ResizeArray<KeyValuePair<string, 'Value>>()
+            let ra = ResizeArray<JsonField<'Value>>()
             let mutable tok = reader.NextToken()
-            if tok.Tag = JsonTag.String then
-                let key = tok.Value
-                let _ = reader.EnsureToken JsonTag.Colon
+            while tok.Tag <> JsonTag.EndObject do
+                let key = tok.AsKey()
                 let value = vpickler.UnPickle reader
                 ra.Add(KeyValuePair(key, value))
-                tok <- reader.NextToken()
-
-            while tok.Tag = JsonTag.Comma do
-                tok <- reader.NextToken()
-                if tok.Tag <> JsonTag.String then unexpectedToken tok
-                let key = tok.Value
-                let _ = reader.EnsureToken JsonTag.Colon
-                let value = vpickler.UnPickle reader
-                ra.Add(KeyValuePair(key, value))
-                tok <- reader.NextToken()
-
-            if tok.Tag <> JsonTag.EndObject then unexpectedToken tok
-            else ctor ra }
-
+                tok <- reader.NextToken() 
+                
+            ctor ra }
 
 type IFieldPickler<'T> =
     abstract Pickle : JsonWriter -> 'T -> unit
@@ -187,28 +170,15 @@ let inline mkRecordShapePickler<'TRecord> (resolver : IPicklerResolver) (ctor : 
             let _ = reader.EnsureToken JsonTag.StartObject
             let mutable record = ctor()
             let mutable tok = reader.NextToken()
-            if tok.Tag = JsonTag.String then
-                let label = tok.Value
-                let _ = reader.EnsureToken JsonTag.Colon
+            while tok.Tag <> JsonTag.EndObject do
+                let label = tok.AsKey()
                 match index.TryFindIndex label with
                 | i when i >= 0 -> record <- picklers.[i].UnPickle reader record
                 | _ -> reader.ConsumeValue()
 
                 tok <- reader.NextToken()
 
-            while tok.Tag = JsonTag.Comma do
-                tok <- reader.NextToken()
-                if tok.Tag <> JsonTag.String then unexpectedToken tok
-                let label = tok.Value
-                let _ = reader.EnsureToken JsonTag.Colon
-                match index.TryFindIndex label with
-                | i when i >= 0 -> record <- picklers.[i].UnPickle reader record
-                | _ -> reader.ConsumeValue()
-
-                tok <- reader.NextToken()
-
-            if tok.Tag = JsonTag.EndObject then record
-            else unexpectedToken tok }
+            record }
 
 // TODO : check what strings make valid json field names
 let mkFSharpUnionPickler<'TUnion> (resolver : IPicklerResolver) (tagId : string option) (shape : ShapeFSharpUnion<'TUnion>) =
@@ -241,44 +211,29 @@ let mkFSharpUnionPickler<'TUnion> (resolver : IPicklerResolver) (tagId : string 
 
         member __.UnPickle reader =
             let _ = reader.EnsureToken JsonTag.StartObject
-            let mutable tok = reader.EnsureToken JsonTag.String
+            let mutable tok = reader.EnsureToken JsonTag.Key
             if tok.Value <> tagId then
                 sprintf "JSON Union objects must begin with a '%s' field" tagId
                 |> VardusiaException
                 |> raise
-                
-            let _ = reader.EnsureToken JsonTag.Colon
+
             tok <- reader.EnsureToken JsonTag.String
 
             match lookup.TryFindIndex tok.Value with
-            | tag when tag < 0 -> raise <| VardusiaException "fook"
+            | tag when tag < 0 -> raise <| VardusiaException (sprintf "Unrecognized union case '%s'" tok.Value)
             | tag ->
 
             let lookup = lookups.[tag]
             let picklers = picklerss.[tag]
             let mutable record = shape.UnionCases.[tag].CreateUninitialized()
-            let _ = reader.EnsureToken JsonTag.Comma
 
             tok <- reader.NextToken()
-            if tok.Tag = JsonTag.String then
-                let label = tok.Value
-                let _ = reader.EnsureToken JsonTag.Colon
+            while tok.Tag <> JsonTag.EndObject do
+                let label = tok.AsKey()
                 match lookup.TryFindIndex label with
                 | i when i >= 0 -> record <- picklers.[i].UnPickle reader record
                 | _ -> reader.ConsumeValue()
 
                 tok <- reader.NextToken()
 
-            while tok.Tag = JsonTag.Comma do
-                tok <- reader.NextToken()
-                if tok.Tag <> JsonTag.String then unexpectedToken tok
-                let label = tok.Value
-                let _ = reader.EnsureToken JsonTag.Colon
-                match lookup.TryFindIndex label with
-                | i when i >= 0 -> record <- picklers.[i].UnPickle reader record
-                | _ -> reader.ConsumeValue()
-
-                tok <- reader.NextToken()
-
-            if tok.Tag = JsonTag.EndObject then record
-            else unexpectedToken tok }
+            record }

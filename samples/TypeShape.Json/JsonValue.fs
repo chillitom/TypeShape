@@ -70,7 +70,6 @@ module private JsonValueImpl =
     let parseJson (reader : JsonReader) =
         let mutable arrBuff = Unchecked.defaultof<ResizeArray<JsonExpr>>
         let mutable recBuf = Unchecked.defaultof<ResizeArray<KeyValuePair<string, JsonExpr>>>
-        //let inline error (tag : JsonTag) = failwithf "Unexpected JSON tag %O" tag
 
         let rec parse (token : JsonToken) =
             match token.Tag with
@@ -80,55 +79,26 @@ module private JsonValueImpl =
             | JsonTag.Number -> Number (JsonNumber token.Value)
             | JsonTag.String -> String token.Value
             | JsonTag.StartArray ->
-                let token = reader.NextToken()
-                if token.Tag = JsonTag.EndArray then Array [||] else
-                let agg = getOrInit &arrBuff
-                let value = parse token
-                agg.Add value
+                let ra = getOrInit &arrBuff
+                let mutable tok = reader.NextToken()
+                while tok.Tag <> JsonTag.EndArray do
+                    let value = parse tok
+                    ra.Add value
+                    tok <- reader.NextToken()
 
-                let mutable ongoing = true
-                while ongoing do
-                    let token = reader.NextToken()
-                    match token.Tag with
-                    | JsonTag.EndArray -> ongoing <- false
-                    | JsonTag.Comma ->
-                        let token = reader.NextToken()
-                        let value = parse token
-                        agg.Add value
-
-                    | _ -> unexpectedToken token
-
-                Array(agg.ToArray())
+                Array(ra.ToArray())
 
             | JsonTag.StartObject ->
-                let inline parseField (token : JsonToken) =
-                    if token.Tag <> JsonTag.String then unexpectedToken token
-                    let field = token.Value
-                    let token = reader.NextToken()
-                    if token.Tag <> JsonTag.Colon then unexpectedToken token
-                    let token = reader.NextToken()
-                    let value = parse token
-                    KeyValuePair(field, value)
+                let ra = getOrInit &recBuf
+                let mutable tok = reader.NextToken()
+                while tok.Tag <> JsonTag.EndObject do
+                    let key = tok.AsKey()
+                    tok <- reader.NextToken()
+                    let value = parse tok
+                    ra.Add(KeyValuePair(key, value))
+                    tok <- reader.NextToken()
 
-                let token = reader.NextToken()
-                if token.Tag = JsonTag.EndObject then Object [||] else
-
-                let agg = getOrInit &recBuf
-                let field = parseField token
-                agg.Add field
-                let mutable ongoing = true
-                while ongoing do
-                    let token = reader.NextToken()
-                    match token.Tag with
-                    | JsonTag.EndObject -> ongoing <- false
-                    | JsonTag.Comma ->
-                        let token = reader.NextToken()
-                        let field = parseField token
-                        agg.Add field
-
-                    | _ -> unexpectedToken token
-
-                Object(agg.ToArray())
+                Object(ra.ToArray())
 
             | _ -> unexpectedToken token
 

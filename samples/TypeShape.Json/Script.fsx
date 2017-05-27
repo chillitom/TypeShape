@@ -1,4 +1,4 @@
-﻿#r "bin/Release/Vardusia.dll"
+﻿#r "bin/Debug/Vardusia.dll"
 
 open System
 open Vardusia
@@ -10,6 +10,7 @@ let json =
             JsonValue.Object [
                 "foo", JsonValue.Number 42 ; 
                 "bar", JsonValue.Number Double.PositiveInfinity
+                "baz", JsonValue.Object []
             ] 
             
             JsonValue.Null 
@@ -21,6 +22,8 @@ let json =
             JsonValue.String """{ "some" : "json", "here" : true }""" 
         ]
 
+JsonValue.Array([]).ToJson(indent = 77)
+
 let string = json.ToJson(indent = 4) |> JsonValue.FromJson
 
 open System.Reflection
@@ -31,7 +34,7 @@ type Tree = { Value : int ; Nested : Tree option }
 let pr = Pickler.auto<Tree>
 
 Pickler.pickle pr { Value = 2 ; Nested = Some { Value = 2 ; Nested = None } }
-|> Pickler.unpickle pr2
+|> Pickler.unpickle pr
 
 let pr2 = Pickler.auto<Foo>
 

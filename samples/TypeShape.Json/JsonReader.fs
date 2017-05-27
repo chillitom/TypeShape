@@ -1,47 +1,106 @@
 ﻿namespace Vardusia
 
 open System
+open System.Collections.Generic
 open System.Text
 open System.Globalization
 
-type JsonTag =
+[<Struct>]
+type JsonToken internal (tag : JsonTag, value : string, pos : int) =
+    member __.Tag = tag
+    member __.Position = pos
+    member __.Value = value
+
+and JsonTag =
     | Null          = 0uy
     | False         = 1uy
     | True          = 2uy
     | Number        = 3uy
     | String        = 4uy
-    | Colon         = 5uy
-    | Comma         = 6uy
-    | StartObject   = 7uy
-    | EndObject     = 8uy
-    | StartArray    = 9uy
-    | EndArray      = 10uy
-    | EOF           = 11uy
+    | Key           = 5uy
+    | StartObject   = 6uy
+    | EndObject     = 7uy
+    | StartArray    = 8uy
+    | EndArray      = 9uy
+    | EOF           = 10uy
 
-[<Struct>]
-type JsonToken(tag : JsonTag, value : string, index : int) =
-    member __.Tag = tag
-    member __.Index = index
-    member __.Value = value
-
-    static member inline Null i = new JsonToken(JsonTag.Null, "null", i)
-    static member inline False i = new JsonToken(JsonTag.False, "false", i)
-    static member inline True i = new JsonToken(JsonTag.True, "true", i)
-    static member inline String i str = new JsonToken(JsonTag.String, str, i)
-    static member inline Number i str = new JsonToken(JsonTag.Number, str, i)
-    static member inline Colon i = new JsonToken(JsonTag.Colon, ":", i)
-    static member inline Comma i = new JsonToken(JsonTag.Comma, ",", i)
-    static member inline StartObject i = new JsonToken(JsonTag.StartObject, "{", i)
-    static member inline EndObject i = new JsonToken(JsonTag.EndObject, "}", i)
-    static member inline StartArray i = new JsonToken(JsonTag.StartArray, "[", i)
-    static member inline EndArray i = new JsonToken(JsonTag.EndArray, "]", i)
-    static member inline EOF i = new JsonToken(JsonTag.EOF, "EOF", i)
+type JsonToken with
+    member tok.Id =
+        match tok.Tag with
+        | JsonTag.Null -> Constants.Null
+        | JsonTag.False -> Constants.False
+        | JsonTag.True -> Constants.True
+        | JsonTag.Number -> tok.Value
+        | JsonTag.Key
+        | JsonTag.String -> "\"" + tok.Value + "\""
+        | JsonTag.StartObject -> string Constants.StartObject
+        | JsonTag.EndObject -> string Constants.EndObject
+        | JsonTag.StartArray -> string Constants.StartArray
+        | JsonTag.EndArray -> string Constants.EndArray
+        | JsonTag.EOF -> "EOF"
+        | t -> invalidOp <| sprintf "internal error: unexpected JSON token '%O'" t
 
 [<AutoOpen>]
-module private JsonReaderImpl =
+module Helpers =
 
     let inline unexpectedToken (tok : JsonToken) =
-        sprintf "Unexpected JSON token '%s' at position %d." tok.Value tok.Index
+        sprintf "Unexpected JSON token '%s' at position %d." tok.Id tok.Position
+        |> VardusiaException
+        |> raise
+
+module private JsonReaderImpl =
+
+    type JCtx =
+        | Root          = 0uy
+        | Object        = 1uy
+        | Array         = 2uy
+        | Key           = 3uy
+
+    type JTag =
+        | Null          = 0uy
+        | False         = 1uy
+        | True          = 2uy
+        | Number        = 3uy
+        | String        = 4uy
+        | Colon         = 5uy
+        | Comma         = 6uy
+        | StartObject   = 7uy
+        | EndObject     = 8uy
+        | StartArray    = 9uy
+        | EndArray      = 10uy
+        | EOF           = 11uy
+
+    type JsonToken with
+        static member inline Null i = new JsonToken(JsonTag.Null, null, i)
+        static member inline False i = new JsonToken(JsonTag.False, null, i)
+        static member inline True i = new JsonToken(JsonTag.True, null, i)
+        static member inline String i str = new JsonToken(JsonTag.String, str, i)
+        static member inline Number i str = new JsonToken(JsonTag.Number, str, i)
+        static member inline Key i str = new JsonToken(JsonTag.Key, str, i)
+        static member inline StartObject i = new JsonToken(JsonTag.StartObject, null, i)
+        static member inline EndObject i = new JsonToken(JsonTag.EndObject, null, i)
+        static member inline StartArray i = new JsonToken(JsonTag.StartArray, null, i)
+        static member inline EndArray i = new JsonToken(JsonTag.EndArray, null, i)
+        static member inline EOF i = new JsonToken(JsonTag.EOF, null, i)
+
+    let inline formatJTag (tag : JTag) (value : string) =
+        match tag with
+        | JTag.Null -> Constants.Null
+        | JTag.False -> Constants.False
+        | JTag.True -> Constants.True
+        | JTag.Number -> value
+        | JTag.String -> "\"" + value + "\""
+        | JTag.Colon -> string Constants.Colon
+        | JTag.Comma -> string Constants.Comma
+        | JTag.StartObject -> string Constants.StartObject
+        | JTag.EndObject -> string Constants.EndObject
+        | JTag.StartArray -> string Constants.StartArray
+        | JTag.EndArray -> string Constants.EndArray
+        | JTag.EOF -> "EOF"
+        | _ -> invalidOp "internal error: could not format json tag"
+
+    let inline unexpectedTag (tag : JTag) (value : string) (pos : int) =
+        sprintf "Unexpected JSON token '%s' at position %d" (formatJTag tag value) pos
         |> VardusiaException
         |> raise
 
@@ -191,54 +250,100 @@ module private JsonReaderImpl =
 
         | _ -> unexpectedToken tok
 
-    let inline parseToken (sb : StringBuilder) (i : byref<int>) (input : string) =
-        let input = input
-        let n = input.Length
-
-        if skipWhiteSpace input n &i then JsonToken.EOF n else
+    let parseJsonToken (sb : StringBuilder) (input : string) (n : int) (i : byref<int>) (tokenPos : byref<int>) (token : byref<string>) =
+        if skipWhiteSpace input n &i then
+            tokenPos <- n
+            JTag.EOF
+        else
         
-        let idx = i
+        tokenPos <- i
 
         match input.[i] with
-        | 'n' when matchLiteral "null" input n &i -> JsonToken.Null idx
-        | 'f' when matchLiteral "false" input n &i -> JsonToken.False idx
-        | 't' when matchLiteral "true" input n &i -> JsonToken.True idx
-        | Constants.StartObject -> i <- i + 1 ; JsonToken.StartObject idx
-        | Constants.EndObject -> i <- i + 1 ; JsonToken.EndObject idx
-        | Constants.StartArray -> i <- i + 1 ; JsonToken.StartArray idx
-        | Constants.EndArray -> i <- i + 1 ; JsonToken.EndArray idx
-        | Constants.Colon -> i <- i + 1 ; JsonToken.Colon idx
-        | Constants.Comma -> i <- i + 1 ; JsonToken.Comma idx
+        | 'n' when matchLiteral Constants.Null input n &i -> JTag.Null
+        | 'f' when matchLiteral Constants.False input n &i -> JTag.False
+        | 't' when matchLiteral Constants.True input n &i -> JTag.True
+        | Constants.StartObject -> i <- i + 1 ; JTag.StartObject
+        | Constants.EndObject -> i <- i + 1 ; JTag.EndObject
+        | Constants.StartArray -> i <- i + 1 ; JTag.StartArray
+        | Constants.EndArray -> i <- i + 1 ; JTag.EndArray
+        | Constants.Colon -> i <- i + 1 ; JTag.Colon
+        | Constants.Comma -> i <- i + 1 ; JTag.Comma
         | Constants.Quote ->
             i <- i + 1
-            let str = parseQuotedString input n sb &i
-            JsonToken.String idx str
+            token <- parseQuotedString input n sb &i
+            JTag.String
 
         | _ -> 
-            let str = parseUnquotedString input n sb &i
-            if isNumber str then JsonToken.Number idx str
-            else JsonToken.String idx str
+            token <- parseUnquotedString input n sb &i
+            if isNumber token then JTag.Number
+            else JTag.String
+
+    let inline getNextToken (ctxs : Stack<JCtx>) (sb : StringBuilder) (input : string) (pos : byref<int>) =
+        let n = input.Length
+        let ctx = ctxs.Peek()
+        let mutable tokenPos = 0
+        let mutable strToken = null
+        let mutable tag = parseJsonToken sb input n &pos &tokenPos &strToken
         
+        // handle comma tokens first
+        if tag = JTag.Comma then
+            match ctx with
+            | JCtx.Root | JCtx.Object | JCtx.Array -> ()
+            | _ -> unexpectedTag tag strToken tokenPos
+
+            // tolerate invalid json strings such '[1,]', '[,1]', '[1 2]' and '[1,,,2]'
+            while tag = JTag.Comma do
+                tag <- parseJsonToken sb input n &pos &tokenPos &strToken
+
+        let inline popKey () = if ctx = JCtx.Key then let _ = ctxs.Pop() in ()
+
+        match tag, ctx with
+        | JTag.Null, (JCtx.Root | JCtx.Key | JCtx.Array) -> popKey () ; JsonToken.Null tokenPos
+        | JTag.False, (JCtx.Root | JCtx.Key | JCtx.Array) -> popKey () ; JsonToken.False tokenPos
+        | JTag.True, (JCtx.Root | JCtx.Key | JCtx.Array) -> popKey () ; JsonToken.True tokenPos
+        | JTag.Number, (JCtx.Root | JCtx.Key | JCtx.Array) -> popKey () ; JsonToken.Number tokenPos strToken
+        | JTag.String, (JCtx.Root | JCtx.Key | JCtx.Array) -> popKey () ; JsonToken.String tokenPos strToken
+        | (JTag.String | JTag.Number), JCtx.Object ->
+            let token = JsonToken.Key tokenPos strToken
+            match parseJsonToken sb input n &pos &tokenPos &strToken with
+            | JTag.Colon -> ctxs.Push JCtx.Key ; token
+            | tag -> unexpectedTag tag strToken tokenPos
+
+        | JTag.StartArray, (JCtx.Root | JCtx.Key | JCtx.Array) -> 
+            popKey () ; ctxs.Push JCtx.Array ; JsonToken.StartArray tokenPos
+
+        | JTag.StartObject, (JCtx.Root | JCtx.Key | JCtx.Array) ->
+            popKey () ; ctxs.Push JCtx.Object ; JsonToken.StartObject tokenPos
+
+        | JTag.EndArray, JCtx.Array -> let _ = ctxs.Pop() in JsonToken.EndArray tokenPos
+        | JTag.EndObject, JCtx.Object -> let _ = ctxs.Pop() in JsonToken.EndObject tokenPos
+        | _ -> unexpectedTag tag strToken tokenPos
+
+
+open JsonReaderImpl
 
 type JsonReader(input : string, format : IFormatProvider) =
     let mutable pos = 0
     let mutable isPeeked = false
-    let mutable peeked = Unchecked.defaultof<_>
+    let mutable peeked = Unchecked.defaultof<JsonToken>
+    let context = new Stack<JCtx>(20)
+    do context.Push JCtx.Root
     let sb = new StringBuilder()
 
     member __.Format = format
-
-    member __.ClearPeeked() = isPeeked <- false
+    member __.Depth = 
+        match context.Peek() with
+        | JCtx.Key -> context.Count - 2
+        | _ -> context.Count - 1
 
     member __.PeekToken() : JsonToken =
         if isPeeked then peeked
         else
             let mutable i = pos
-            let tok = parseToken sb &i input
+            peeked <- getNextToken context sb input &i
             pos <- i
             isPeeked <- true
-            peeked <- tok
-            tok
+            peeked
 
     member __.NextToken() : JsonToken =
         if isPeeked then
@@ -246,7 +351,7 @@ type JsonReader(input : string, format : IFormatProvider) =
             peeked
         else
             let mutable i = pos
-            let tok = parseToken sb &i input
+            let tok = getNextToken context sb input &i
             pos <- i
             tok
 
@@ -331,17 +436,26 @@ type JsonToken with
         | JsonTag.String -> Convert.FromBase64String tok.Value
         | _ -> unexpectedToken tok
 
+    member inline tok.AsKey() : string =
+        match tok.Tag with
+        | JsonTag.Key -> tok.Value
+        | _ -> unexpectedToken tok
 
 type JsonReader with
     member inline reader.EnsureToken(tag) =
         let tok = reader.NextToken()
-        if tag <> tok.Tag then
-            unexpectedToken tok
+        if tag <> tok.Tag then unexpectedToken tok
         tok
 
-    member inline reader.ConsumeValue() =
+    member reader.ConsumeValue() =
         let tok = reader.NextToken()
         match tok.Tag with
+        | JsonTag.Null
+        | JsonTag.False
+        | JsonTag.True
+        | JsonTag.Number
+        | JsonTag.String -> ()
+
         | JsonTag.StartArray
         | JsonTag.StartObject ->
             let mutable depth = 1
@@ -354,4 +468,4 @@ type JsonReader with
                 | JsonTag.EndObject -> depth <- depth - 1
                 | _ -> ()
 
-        | _ -> ()
+        | _ -> unexpectedToken tok

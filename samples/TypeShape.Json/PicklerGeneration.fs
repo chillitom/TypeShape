@@ -128,22 +128,3 @@ let resolve<'T> (cache : TypeCache) : JsonPickler<'T> =
                         ctx.Complete p }
 
         self.Resolve<'T> ()
-    
-
-
-//module Pickler =
-//    open System.Globalization
-
-//    let private cache = new TypeCache()
-
-//    let resolve<'T> () : JsonPickler<'T> =
-
-
-//    let pickle (pickler : JsonPickler<'T>) (value : 'T) : string =
-//        let writer = new JsonWriter(2, CultureInfo.InvariantCulture)
-//        pickler.Pickle writer value
-//        writer.ToJson()
-
-//    let unpickle (pickler : JsonPickler<'T>) (json : string) : 'T =
-//        let reader = new JsonReader(json, CultureInfo.InvariantCulture)
-//        pickler.UnPickle reader
