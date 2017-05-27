@@ -19,6 +19,28 @@ module private JsonWriterImpl =
                 let _ = sb.Append(spacesStr, 0, k)
                 spaces <- spaces - k
 
+    // Encode characters that are not valid in JS string. The implementation is based
+    // on https://github.com/mono/mono/blob/master/mcs/class/System.Web/System.Web/HttpUtility.cs
+    let inline appendEscaped (sb : StringBuilder) (str : string) =
+        let n = str.Length - 1
+        append sb '"'
+        for i = 0 to n do
+            let c = str.[i]
+            let ci = int c
+            if ci >= 0 && ci <= 7 || ci = 11 || ci >= 14 && ci <= 31 then
+                sb.AppendFormat("\\u{0:x4}", ci) |> ignore
+            else
+                match c with
+                | '\b' -> append sb "\\b"
+                | '\t' -> append sb "\\t"
+                | '\n' -> append sb "\\n"
+                | '\f' -> append sb "\\f"
+                | '\r' -> append sb "\\r"
+                | '"'  -> append sb "\\\""
+                | '\\' -> append sb "\\\\"
+                | s -> append sb s
+        append sb '"'
+
 type JsonWriter(indent : int, fmt : IFormatProvider) =
     let sb = new StringBuilder()
     let mutable depth = 0
