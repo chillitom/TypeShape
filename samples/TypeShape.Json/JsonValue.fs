@@ -30,42 +30,23 @@ module private JsonValueImpl =
         | JsonExpr.Object _ -> "object"
         | JsonExpr.Array _ -> "array"
 
-    let formatJson (writer : JsonWriter) (value : JsonExpr) =
-        let rec aux value =
-            match value with
-            | Null ->  writer.Null()
-            | Bool b -> writer.Bool b
-            | Number num -> writer.Number num.Value
-            | String s -> writer.String s
-            | Array items -> 
-                writer.StartArray()
-                let n = items.Length
-                if n > 0 then
-                    aux items.[0]
+    let rec formatJson (writer : JsonWriter) (value : JsonExpr) =
+        match value with
+        | Null ->  writer.Null()
+        | Bool b -> writer.Bool b
+        | Number num -> writer.Number num.Value
+        | String s -> writer.String s
+        | Array items -> 
+            writer.StartArray()
+            for item in items do formatJson writer item
+            writer.EndArray()
 
-                    for i = 1 to n - 1 do
-                        writer.NextValue()
-                        aux items.[i]
-
-                writer.EndArray()
-
-            | Object items ->
-                writer.StartObject()
-                let n = items.Length
-                if n > 0 then
-                    let kv = items.[0]
-                    writer.FieldName kv.Key
-                    aux kv.Value
-
-                    for i = 1 to n - 1 do
-                        writer.NextValue()
-                        let kv = items.[i]
-                        writer.FieldName kv.Key
-                        aux kv.Value
-
-                writer.EndObject()
-
-        do aux value
+        | Object items ->
+            writer.StartObject()
+            for item in items do
+                writer.Key item.Key
+                formatJson writer item.Value
+            writer.EndObject()
 
     let parseJson (reader : JsonReader) =
         let mutable arrBuff = Unchecked.defaultof<ResizeArray<JsonExpr>>
@@ -114,8 +95,8 @@ type JsonValue internal (expr : JsonExpr) =
     member internal __.Expr = expr
     member private __.SFD = sprintf "%+A" expr
     override __.ToString () = __.SFD
-    member __.ToJson(?indent : int) = 
-        let writer = JsonWriter(defaultArg indent 0, CultureInfo.InvariantCulture)
+    member __.ToJson(?indent : Indent) = 
+        let writer = JsonWriter(defaultArg indent Indent.None, CultureInfo.InvariantCulture)
         formatJson writer expr
         writer.ToJson()
 

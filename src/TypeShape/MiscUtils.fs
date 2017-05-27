@@ -25,6 +25,7 @@ type Cell<'T> internal (container : 'T option ref) =
         | None -> failwithf "Value for '%O' has not been initialized." typeof<'T>
         | Some t -> value <- t ; isCreated <- true ; t
 
+[<NoEquality; NoComparison>]
 type private RecTypePayload = { Cell : obj ; Value : obj ; IsValueSet : unit -> bool }
 
 /// Helper class for generating recursive values

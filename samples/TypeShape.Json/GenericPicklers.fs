@@ -69,15 +69,8 @@ type NullablePickler<'T when 'T : struct
 let inline mkCollectionPickler<'Collection, 'T when 'Collection :> seq<'T>> (tpickler : JsonPickler<'T>) (ctor : ResizeArray<'T> -> 'Collection) =
     { new JsonPickler<'Collection> with
         member __.Pickle writer ts =
-            use e = ts.GetEnumerator()
             writer.StartArray()
-            if e.MoveNext() then 
-                tpickler.Pickle writer e.Current
-
-            while e.MoveNext() do
-                writer.NextValue()
-                tpickler.Pickle writer e.Current
-
+            for t in ts do tpickler.Pickle writer t
             writer.EndArray()
 
         member __.UnPickle reader =
@@ -99,16 +92,8 @@ let inline mkDictionaryPickler<'Dict, 'Value when 'Dict :> seq<JsonField<'Value>
     { new JsonPickler<'Dict> with
         member __.Pickle writer map =
             writer.StartObject()
-            let e = map.GetEnumerator()
-            if e.MoveNext() then
-                let kv = e.Current
-                writer.FieldName kv.Key
-                vpickler.Pickle writer kv.Value
-
-            while e.MoveNext() do
-                writer.NextValue()
-                let kv = e.Current
-                writer.FieldName kv.Key
+            for kv in map do
+                writer.Key kv.Key
                 vpickler.Pickle writer kv.Value
 
             writer.EndObject()
@@ -137,7 +122,7 @@ let mkFieldPickler (resolver : IPicklerResolver) (shapeField : IShapeWriteMember
             { new IFieldPickler<'T> with
                 member __.Pickle writer t = 
                     let field = shape.Project t
-                    writer.FieldName label
+                    writer.Key label
                     fp.Pickle writer field
 
                 member __.UnPickle reader t =
@@ -156,14 +141,7 @@ let inline mkRecordShapePickler<'TRecord> (resolver : IPicklerResolver) (ctor : 
     { new JsonPickler<'TRecord> with
         member __.Pickle writer record =
             writer.StartObject()
-            let n = picklers.Length
-            if n > 0 then
-                picklers.[0].Pickle writer record
-
-            for i = 1 to n - 1 do
-                writer.NextValue()
-                picklers.[i].Pickle writer record
-
+            for p in picklers do p.Pickle writer record
             writer.EndObject()
 
         member __.UnPickle reader =
@@ -194,19 +172,11 @@ let mkFSharpUnionPickler<'TUnion> (resolver : IPicklerResolver) (tagId : string 
         member __.Pickle writer union =
             writer.StartObject()
             let tag = shape.GetTag union
-            writer.FieldName tagId
+            writer.Key tagId
             writer.String tags.[tag]
-            writer.NextValue()
 
             let picklers = picklerss.[tag]
-            let n = picklers.Length
-            if n > 0 then
-                picklers.[0].Pickle writer union
-
-            for i = 1 to n - 1 do
-                writer.NextValue()
-                picklers.[i].Pickle writer union
-
+            for p in picklers do p.Pickle writer union
             writer.EndObject()
 
         member __.UnPickle reader =

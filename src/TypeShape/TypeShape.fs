@@ -1241,6 +1241,7 @@ module private MemberUtils2 =
 [<AutoOpen>]
 module private ShapeTupleImpl =
 
+    [<NoEquality; NoComparison>]
     type TupleInfo =
         { 
             Current : Type

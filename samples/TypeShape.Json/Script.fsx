@@ -10,7 +10,9 @@ let json =
             JsonValue.Object [
                 "foo", JsonValue.Number 42 ; 
                 "bar", JsonValue.Number Double.PositiveInfinity
-                "baz", JsonValue.Object []
+                "baz", JsonValue.Array [JsonValue.Number 1 ; JsonValue.Number 2]
+                "bazz", JsonValue.Array []
+                "asa", JsonValue.Object []
             ] 
             
             JsonValue.Null 
@@ -22,9 +24,9 @@ let json =
             JsonValue.String """{ "some" : "json", "here" : true }""" 
         ]
 
-JsonValue.Array([]).ToJson(indent = 77)
-
-let string = json.ToJson(indent = 4) |> JsonValue.FromJson
+JsonValue.Array([]).ToJson(indent = Indent.Spaces 2)
+json.ToJson(indent = Indent.Spaces 2) |> printfn "%s"
+let string = json.ToJson(indent = Indent.Compact) |> JsonValue.FromJson
 
 open System.Reflection
 type Foo = { A : string option ; B : int list ; FlAgs : System.Reflection.BindingFlags ; Date : DateTimeOffset ; TimeSpan : TimeSpan }
@@ -32,6 +34,10 @@ type Foo = { A : string option ; B : int list ; FlAgs : System.Reflection.Bindin
 type Tree = { Value : int ; Nested : Tree option }
 
 let pr = Pickler.auto<Tree>
+
+let serializer = new JsonSerializer()
+
+serializer.Pickle({ Value = 2 ; Nested = Some { Value = 2 ; Nested = None } }, indent = Indent.Compact)
 
 Pickler.pickle pr { Value = 2 ; Nested = Some { Value = 2 ; Nested = None } }
 |> Pickler.unpickle pr
@@ -42,7 +48,7 @@ let record = { A = Some "skata"; B = [1 .. 10] ; Date = DateTimeOffset.Now ; Tim
 Pickler.pickle pr2 record |> Pickler.unpickle pr2
 
 Console.WriteLine string
-let r = JsonValue.FromJson <| json.ToJson(indent = 4)
+let r = JsonValue.FromJson <| json.ToJson(indent = Indent.Spaces 2)
 
 type Union =
     | A
@@ -66,8 +72,6 @@ let pp = Pickler.auto<P list>
 match r with
 | JsonValue.Element 0 (JsonValue.Field "bar" x) -> Some x
 | _ -> None
-
-reader.NextToken()
 
 open System
 

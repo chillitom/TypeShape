@@ -5,6 +5,10 @@ open System
 open System.Text
 open System.Globalization
 
+let inline isNull x = match x with null -> true | _ -> false
+
+let inline hasFlag flag value = value &&& flag = flag
+
 let inline append sb t =
     let _ = (^StringBuilder : (member Append : ^t -> ^StringBuilder) (sb, t))
     ()

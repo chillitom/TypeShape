@@ -265,9 +265,9 @@ module private JsonReaderImpl =
         tokenPos <- i
 
         match input.[i] with
-        | 'n' when matchLiteral Constants.Null input n &i -> JTag.Null
-        | 'f' when matchLiteral Constants.False input n &i -> JTag.False
-        | 't' when matchLiteral Constants.True input n &i -> JTag.True
+        | 'n' when matchLiteral "null" input n &i -> JTag.Null
+        | 'f' when matchLiteral "false" input n &i -> JTag.False
+        | 't' when matchLiteral "true" input n &i -> JTag.True
         | Constants.StartObject -> i <- i + 1 ; JTag.StartObject
         | Constants.EndObject -> i <- i + 1 ; JTag.EndObject
         | Constants.StartArray -> i <- i + 1 ; JTag.StartArray
