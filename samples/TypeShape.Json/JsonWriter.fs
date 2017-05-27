@@ -91,8 +91,10 @@ module private JsonWriterImpl =
             markSequence stack
 
 open JsonWriterImpl
+open System.Globalization
 
 type JsonWriter(indent : Indent, fmt : IFormatProvider) =
+    let fmt = getDefaultFmt fmt
     let intIndent = int indent
     let sb = new StringBuilder()
     let stack = new Stack<JCtx>(20)
@@ -159,7 +161,11 @@ type JsonWriter(indent : Indent, fmt : IFormatProvider) =
         if hasFlag JCtx.Sequence ctx then newLine intIndent stack sb
         append sb Constants.EndArray 
 
-    member __.ToJson() = sb.ToString()
+    member __.ToJson() = 
+        if stack.Count > 1 then
+            raise <| VardusiaException("Attempting to export an incomplete JsonWriter.")
+
+        sb.ToString()
 
 
 type JsonWriter with
@@ -220,6 +226,10 @@ type JsonWriter with
         else
             let value = format jw.Format double
             jw.Number value
+
+    member jw.WriteValue(decimal : decimal) =
+        let value = format jw.Format decimal
+        jw.Number value
 
     member jw.WriteValue(timespan : TimeSpan) =
         let fmt = timespan.ToString("G", jw.Format)

@@ -168,6 +168,7 @@ module private JsonReaderImpl =
                 | '\\' -> append sb '\\'
                 | '/' -> append sb '/'
                 | 'u' ->
+                    // Taken from FSharp.Data
                     if i + 5 >= n then failRead input i
                     let inline hex2int i d =
                         if d >= '0' && d <= '9' then int32 d - int32 '0'
@@ -329,6 +330,7 @@ module private JsonReaderImpl =
 open JsonReaderImpl
 
 type JsonReader(input : string, format : IFormatProvider) =
+    let format = getDefaultFmt format
     let mutable pos = 0
     let mutable isPeeked = false
     let mutable peeked = Unchecked.defaultof<JsonToken>
@@ -405,6 +407,7 @@ type JsonToken with
 
     member tok.AsSingle fmt : single = parseFloat fmt Single.NaN Single.NegativeInfinity Single.PositiveInfinity tok
     member tok.AsDouble fmt : double = parseFloat fmt Double.NaN Double.NegativeInfinity Double.PositiveInfinity tok
+    member tok.AsDecimal fmt : decimal = parseNumeric fmt 0M tok
 
     member tok.AsTimeSpan fmt : TimeSpan =
         match tok.Tag with

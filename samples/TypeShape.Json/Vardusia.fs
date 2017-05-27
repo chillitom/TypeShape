@@ -89,6 +89,11 @@ module Pickler =
     let int     = Int32Pickler() :> JsonPickler<_>
     let int64   = Int64Pickler() :> JsonPickler<_>
 
+    let single = SinglePickler() :> JsonPickler<_>
+    let double = DoublePickler() :> JsonPickler<_>
+    let decimal = DecimalPickler() :> JsonPickler<_>
+    let float = double
+
     let timespan = TimeSpanPickler() :> JsonPickler<_>
     let datetime = DateTimePickler() :> JsonPickler<_>
     let datetimeOffset = DateTimeOffsetPickler() :> JsonPickler<_>

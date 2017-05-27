@@ -81,6 +81,27 @@ type UInt64Pickler() =
             let tok = reader.NextToken()
             tok.AsUInt64 reader.Format
 
+type SinglePickler() =
+    interface JsonPickler<single> with
+        member __.Pickle writer s = writer.WriteValue s
+        member __.UnPickle reader =
+            let tok = reader.NextToken()
+            tok.AsSingle reader.Format
+
+type DoublePickler() =
+    interface JsonPickler<double> with
+        member __.Pickle writer s = writer.WriteValue s
+        member __.UnPickle reader =
+            let tok = reader.NextToken()
+            tok.AsDouble reader.Format
+
+type DecimalPickler() =
+    interface JsonPickler<decimal> with
+        member __.Pickle writer d = writer.WriteValue d
+        member __.UnPickle reader =
+            let tok = reader.NextToken()
+            tok.AsDecimal reader.Format
+
 type TimeSpanPickler() =
     interface JsonPickler<TimeSpan> with
         member __.Pickle writer timespan = writer.WriteValue timespan

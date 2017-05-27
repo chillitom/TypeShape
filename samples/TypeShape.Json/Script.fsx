@@ -24,18 +24,7 @@ let json =
             JsonValue.String """{ "some" : "json", "here" : true }""" 
         ]
 
-let cacheB = new PicklerCacheBuilder()
-
-cacheB.TryRegister(fun r -> printfn "askaa" ; r.Resolve<int>())
-
-let cache = cacheB.ToPicklerCache()
-
-cache.Resolve<int>()
-
-cache.Resolve<int>()
-
-JsonValue.Array([]).ToJson(indent = Indent.Spaces 2)
-json.ToJson(indent = Indent.Spaces 2) |> printfn "%s"
+json.ToJsonString(indent = Indent.Spaces 2) |> printfn "%s"
 let string = json.ToJson(indent = Indent.Compact) |> JsonValue.FromJson
 
 open System.Reflection

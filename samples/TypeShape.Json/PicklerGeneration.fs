@@ -25,10 +25,13 @@ let generatePickler<'T> (resolver : IPicklerResolver) (picklerFactories : TypeCa
     | Shape.UInt16 -> UInt16Pickler() |> EQ
     | Shape.UInt32 -> UInt32Pickler() |> EQ
     | Shape.UInt64 -> UInt64Pickler() |> EQ
+    | Shape.Single -> SinglePickler() |> EQ
+    | Shape.Double -> DoublePickler() |> EQ
+    | Shape.Decimal -> DecimalPickler() |> EQ
+    | Shape.BigInt -> BigIntegerPickler() |> EQ
     | Shape.TimeSpan -> TimeSpanPickler() |> EQ
     | Shape.DateTime -> DateTimePickler() |> EQ
     | Shape.DateTimeOffset -> DateTimeOffsetPickler() |> EQ
-    | Shape.BigInt -> BigIntegerPickler() |> EQ
     | Shape.String -> StringPickler() |> EQ
     | Shape.ByteArray -> ByteArrayPickler() |> EQ
     | Shape.Enum s ->

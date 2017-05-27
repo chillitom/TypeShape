@@ -5,6 +5,9 @@ open System
 open System.Text
 open System.Globalization
 
+type OAttribute = System.Runtime.InteropServices.OptionalAttribute
+type DAttribute = System.Runtime.InteropServices.DefaultParameterValueAttribute
+
 let inline isNull x = match x with null -> true | _ -> false
 
 let inline hasFlag flag value = value &&& flag = flag
@@ -13,20 +16,28 @@ let inline append sb t =
     let _ = (^StringBuilder : (member Append : ^t -> ^StringBuilder) (sb, t))
     ()
 
+type FP = IFormatProvider
+
+let inline getDefaultFmt (fmt : IFormatProvider) =
+    match fmt with null -> CultureInfo.InvariantCulture :> IFormatProvider | fmt -> fmt
+
+let inline format fmt (input : ^t) =
+    (^t : (member ToString : IFormatProvider -> string) (input, getDefaultFmt fmt))
+
+let inline parse fmt (input : string) =
+    (^t : (static member Parse : string * IFormatProvider -> ^t) (input, getDefaultFmt fmt))
+
+let inline tryParseNumber fmt (result : byref<_>) (input : string) =
+    (^t : (static member TryParse : string * NumberStyles * IFormatProvider * byref< ^t> -> bool) 
+                                (input, NumberStyles.Any, getDefaultFmt fmt, &result))
+
 let inline getOrInit (ref : byref< ^t>) =
     match ref with
     | null -> ref <- new ^t() ; ref
     | _ -> (^t : (member Clear : unit -> unit) ref) ; ref
 
-let inline format fmt (input : ^t) =
-    (^t : (member ToString : IFormatProvider -> string) (input, fmt))
+let inline explicit t = (^t : (static member op_Explicit : ^t -> ^s) t)
 
-let inline parse fmt (input : string) =
-    (^t : (static member Parse : string * IFormatProvider -> ^t) (input, fmt))
-
-let inline tryParseNumber fmt (result : byref<_>) (input : string) =
-    (^t : (static member TryParse : string * NumberStyles * IFormatProvider * byref< ^t> -> bool) 
-                                (input, NumberStyles.Any, fmt, &result))
 
 module Array =
     let inline mapFast (f : ^a -> ^b) (xs : ^a[]) =
