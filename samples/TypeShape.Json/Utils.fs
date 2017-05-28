@@ -21,18 +21,18 @@ let inline getDefaultFmt (fmt : IFormatProvider) =
     match fmt with null -> CultureInfo.InvariantCulture :> IFormatProvider | fmt -> fmt
 
 let inline format fmt (input : ^t) =
-    (^t : (member ToString : IFormatProvider -> string) (input, getDefaultFmt fmt))
+    (^t : (member ToString : IFormatProvider -> string) (input, fmt))
 
 let inline parse fmt (input : string) =
-    (^t : (static member Parse : string * IFormatProvider -> ^t) (input, getDefaultFmt fmt))
+    (^t : (static member Parse : string * IFormatProvider -> ^t) (input, fmt))
 
 let inline tryParseNumber fmt (result : byref<_>) (input : string) =
     (^t : (static member TryParse : string * NumberStyles * IFormatProvider * byref< ^t> -> bool) 
-                                (input, NumberStyles.Any, getDefaultFmt fmt, &result))
+                                (input, NumberStyles.Any, fmt, &result))
 
-let inline isNumber (value : string) =
+let inline isNumber fmt (value : string) =
     let mutable x = 0.
-    Double.TryParse(value, NumberStyles.Any, CultureInfo.InvariantCulture, &x)
+    Double.TryParse(value, NumberStyles.Any, fmt, &x)
 
 module Array =
     let inline mapFast (f : ^a -> ^b) (xs : ^a[]) =

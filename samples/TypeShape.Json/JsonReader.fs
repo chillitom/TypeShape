@@ -253,7 +253,7 @@ module private JsonReaderImpl =
 
         | _ -> unexpectedToken tok
 
-    let parseJsonToken (sb : StringBuilder) (input : string) (n : int) (i : byref<int>) (tokenPos : byref<int>) (token : byref<string>) =
+    let parseJsonToken (sb : StringBuilder) fmt (input : string) (n : int) (i : byref<int>) (tokenPos : byref<int>) (token : byref<string>) =
         if skipWhiteSpace input n &i then
             tokenPos <- n
             JTag.EOF
@@ -278,15 +278,15 @@ module private JsonReaderImpl =
 
         | _ -> 
             token <- parseUnquotedString input n sb &i
-            if isNumber token then JTag.Number
+            if isNumber fmt token then JTag.Number
             else JTag.String
 
-    let inline getNextToken (ctxs : Stack<JCtx>) (sb : StringBuilder) (input : string) (pos : byref<int>) =
+    let inline getNextToken (ctxs : Stack<JCtx>) fmt (sb : StringBuilder) (input : string) (pos : byref<int>) =
         let n = input.Length
         let ctx = ctxs.Peek()
         let mutable tokenPos = 0
         let mutable strToken = null
-        let mutable tag = parseJsonToken sb input n &pos &tokenPos &strToken
+        let mutable tag = parseJsonToken sb fmt input n &pos &tokenPos &strToken
         
         // handle comma tokens first
         if tag = JTag.Comma then
@@ -296,7 +296,7 @@ module private JsonReaderImpl =
 
             // tolerate invalid json strings such '[1,]', '[,1]', '[1 2]' and '[1,,,2]'
             while tag = JTag.Comma do
-                tag <- parseJsonToken sb input n &pos &tokenPos &strToken
+                tag <- parseJsonToken sb fmt input n &pos &tokenPos &strToken
 
         let inline popKey () = if ctx = JCtx.Key then let _ = ctxs.Pop() in ()
 
@@ -308,7 +308,7 @@ module private JsonReaderImpl =
         | JTag.String, (JCtx.Root | JCtx.Key | JCtx.Array) -> popKey () ; JsonToken.String tokenPos strToken
         | (JTag.String | JTag.Number), JCtx.Object ->
             let token = JsonToken.Key tokenPos strToken
-            match parseJsonToken sb input n &pos &tokenPos &strToken with
+            match parseJsonToken sb fmt input n &pos &tokenPos &strToken with
             | JTag.Colon -> ctxs.Push JCtx.Key ; token
             | tag -> unexpectedTag tag strToken tokenPos
 
@@ -344,7 +344,7 @@ type JsonReader(input : string, format : IFormatProvider) =
         if isPeeked then peeked
         else
             let mutable i = pos
-            peeked <- getNextToken context sb input &i
+            peeked <- getNextToken context format sb input &i
             pos <- i
             isPeeked <- true
             peeked
@@ -355,7 +355,7 @@ type JsonReader(input : string, format : IFormatProvider) =
             peeked
         else
             let mutable i = pos
-            let tok = getNextToken context sb input &i
+            let tok = getNextToken context format sb input &i
             pos <- i
             tok
 

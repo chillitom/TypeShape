@@ -5,23 +5,23 @@ open Vardusia
 open System.Reflection
 
 let json =
-    JsonValue.Array 
+    JsonValue.array 
         [ 
-            JsonValue.Object [
-                "foo", JsonValue.Number 42 ; 
-                "bar", JsonValue.Number Double.PositiveInfinity
-                "baz", JsonValue.Array [JsonValue.Number 1 ; JsonValue.Number 2]
-                "bazz", JsonValue.Array []
-                "asa", JsonValue.Object []
+            JsonValue.obj [
+                "foo" => JsonValue.num 42 ; 
+                "bar" => JsonValue.num Double.PositiveInfinity
+                "baz" => JsonValue.array [JsonValue.num 1 ; JsonValue.num 2]
+                "bazz" => JsonValue.array []
+                "asa" => JsonValue.obj []
             ] 
             
-            JsonValue.Null 
+            JsonValue.Null
 
-            JsonValue.Number 42
+            JsonValue.num 42
 
-            JsonValue.Bool true
+            JsonValue.bool true
 
-            JsonValue.String """{ "some" : "json", "here" : true }""" 
+            JsonValue.string """{ "some" : "json", "here" : true }""" 
         ]
 
 
@@ -46,7 +46,7 @@ Pickler.pickle pr { Value = 2 ; Nested = Some { Value = 2 ; Nested = None } }
 
 let pr2 = Pickler.auto<Foo>
 
-let record = { A = Some "skata"; B = [1 .. 10] ; Date = DateTimeOffset.Now ; TimeSpan = TimeSpan.FromHours 48.1231 ; FlAgs = BindingFlags.NonPublic ||| BindingFlags.Instance }
+let record = { A = Some "f00"; B = [1 .. 10] ; Date = DateTimeOffset.Now ; TimeSpan = TimeSpan.FromHours 48.1231 ; FlAgs = BindingFlags.NonPublic ||| BindingFlags.Instance }
 Pickler.pickle pr2 record |> Pickler.unpickle pr2
 
 Console.WriteLine string
