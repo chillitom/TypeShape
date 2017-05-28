@@ -228,22 +228,21 @@ type FSharpUnionPickler<'TUnion> (resolver : IPicklerResolver, shape : ShapeFSha
             let picklers = picklerss.[tag]
             let mutable record = shape.UnionCases.[tag].CreateUninitialized()
             
-            if picklers.Length = 0 then record else
-
-            tok <- reader.EnsureToken JsonTag.Key
-            if tok.Value <> unionFieldsKey then
-                sprintf "Nontrivial JSON Union objects must specify a '%s' object" unionFieldsKey
-                |> VardusiaException
-                |> raise
-
-            let _ = reader.EnsureToken JsonTag.StartObject
             tok <- reader.NextToken()
-            while tok.Tag <> JsonTag.EndObject do
-                let label = tok.AsKey()
-                match labels.TryFindIndex label with
-                | i when i >= 0 -> record <- picklers.[i].UnPickle reader record
-                | _ -> reader.ConsumeValue()
-
+            match tok.Tag with
+            | JsonTag.EndObject -> record
+            | JsonTag.Key when tok.Value = unionFieldsKey ->
+                let _ = reader.EnsureToken JsonTag.StartObject
                 tok <- reader.NextToken()
+                while tok.Tag <> JsonTag.EndObject do
+                    let label = tok.AsKey()
+                    match labels.TryFindIndex label with
+                    | i when i >= 0 -> record <- picklers.[i].UnPickle reader record
+                    | _ -> reader.ConsumeValue()
 
-            record
+                    tok <- reader.NextToken()
+
+                let _ = reader.EnsureToken JsonTag.EndObject
+                record
+
+            | _ -> unexpectedToken tok

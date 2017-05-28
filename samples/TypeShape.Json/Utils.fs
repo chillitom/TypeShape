@@ -31,13 +31,6 @@ let inline tryParseNumber fmt (result : byref<_>) (input : string) =
     (^t : (static member TryParse : string * NumberStyles * IFormatProvider * byref< ^t> -> bool) 
                                 (input, NumberStyles.Any, getDefaultFmt fmt, &result))
 
-let inline getOrInit (ref : byref< ^t>) =
-    match ref with
-    | null -> ref <- new ^t() ; ref
-    | _ -> (^t : (member Clear : unit -> unit) ref) ; ref
-
-let inline explicit t = (^t : (static member op_Explicit : ^t -> ^s) t)
-
 
 module Array =
     let inline mapFast (f : ^a -> ^b) (xs : ^a[]) =

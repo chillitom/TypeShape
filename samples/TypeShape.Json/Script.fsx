@@ -25,7 +25,7 @@ let json =
         ]
 
 json.ToJsonString(indent = Indent.Spaces 2) |> printfn "%s"
-let string = json.ToJson(indent = Indent.Compact) |> JsonValue.FromJson
+let string = json.ToJsonString(indent = Indent.Compact) |> JsonValue.Parse
 
 open System.Reflection
 type Foo = { A : string option ; B : int list ; FlAgs : System.Reflection.BindingFlags ; Date : DateTimeOffset ; TimeSpan : TimeSpan }
@@ -47,18 +47,21 @@ let record = { A = Some "skata"; B = [1 .. 10] ; Date = DateTimeOffset.Now ; Tim
 Pickler.pickle pr2 record |> Pickler.unpickle pr2
 
 Console.WriteLine string
-let r = JsonValue.FromJson <| json.ToJson(indent = Indent.Spaces 2)
+let r = JsonValue.Parse <| json.ToJsonString(indent = Indent.Spaces 2)
 
 type Union =
     | A
     | B of foo:int * bar:string
     | C of byte[]
+    | D of int
 
 
-let up = Pickler.auto<Union>
+let up = Pickler.auto<Union list>
 
-Pickler.pickle up [A;A; B(2,"foo") ; C [|1uy .. 10uy|]]
+Pickler.pickle up [D 42 ; A ;A; B(2,"foo") ; C [|1uy .. 10uy|]]
 |> Pickler.unpickle up
+
+Pickler.pickle Pickler.auto [Some 42; None; Some 12]
 
 type P =
     | Z
@@ -67,12 +70,6 @@ type P =
 let pp = Pickler.auto<P list>
 
 [Z ; S (S Z)] |> Pickler.pickle pp
-
-match r with
-| JsonValue.Element 0 (JsonValue.Field "bar" x) -> Some x
-| _ -> None
-
-open System
 
 type ClassU =
     | CA of int64

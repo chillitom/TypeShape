@@ -132,9 +132,6 @@ module private JsonValueImpl =
             writer.EndObject()
 
     let parseJson (reader : JsonReader) =
-        let mutable arrBuff = Unchecked.defaultof<ResizeArray<JsonExpr>>
-        let mutable recBuf = Unchecked.defaultof<ResizeArray<KeyValuePair<string, JsonExpr>>>
-
         let rec parse (token : JsonToken) =
             match token.Tag with
             | JsonTag.Null -> JsonExpr.Null
@@ -143,7 +140,7 @@ module private JsonValueImpl =
             | JsonTag.Number -> JsonExpr.Number (JsonNumber token.Value)
             | JsonTag.String -> JsonExpr.String token.Value
             | JsonTag.StartArray ->
-                let ra = getOrInit &arrBuff
+                let ra = ResizeArray()
                 let mutable tok = reader.NextToken()
                 while tok.Tag <> JsonTag.EndArray do
                     let value = parse tok
@@ -153,7 +150,7 @@ module private JsonValueImpl =
                 JsonExpr.Array(ra.ToArray())
 
             | JsonTag.StartObject ->
-                let ra = getOrInit &recBuf
+                let ra = ResizeArray()
                 let mutable tok = reader.NextToken()
                 while tok.Tag <> JsonTag.EndObject do
                     let key = tok.AsKey()
