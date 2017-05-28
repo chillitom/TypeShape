@@ -125,10 +125,6 @@ module private JsonReaderImpl =
         if isMatch then i <- i + n0 ; true
         else false
 
-    let inline isNumber (value : string) =
-        let mutable x = 0.
-        Double.TryParse(value, NumberStyles.Any, CultureInfo.InvariantCulture, &x)
-
     let inline parseUnquotedString (input : string) (n : int) (sb : StringBuilder) (i : byref<int>) =
         let sb = sb.Clear()
         let mutable notCompleted = true

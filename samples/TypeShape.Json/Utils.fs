@@ -2,7 +2,6 @@
 module internal Vardusia.Utils
 
 open System
-open System.Text
 open System.Globalization
 
 type OAttribute = System.Runtime.InteropServices.OptionalAttribute
@@ -31,6 +30,9 @@ let inline tryParseNumber fmt (result : byref<_>) (input : string) =
     (^t : (static member TryParse : string * NumberStyles * IFormatProvider * byref< ^t> -> bool) 
                                 (input, NumberStyles.Any, getDefaultFmt fmt, &result))
 
+let inline isNumber (value : string) =
+    let mutable x = 0.
+    Double.TryParse(value, NumberStyles.Any, CultureInfo.InvariantCulture, &x)
 
 module Array =
     let inline mapFast (f : ^a -> ^b) (xs : ^a[]) =

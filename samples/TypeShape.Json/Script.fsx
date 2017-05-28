@@ -24,6 +24,9 @@ let json =
             JsonValue.String """{ "some" : "json", "here" : true }""" 
         ]
 
+
+Pickler.pickle Pickler.auto<JsonValue>  json
+
 json.ToJsonString(indent = Indent.Spaces 2) |> printfn "%s"
 let string = json.ToJsonString(indent = Indent.Compact) |> JsonValue.Parse
 

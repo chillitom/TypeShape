@@ -2,6 +2,7 @@
 
 open System
 open System.Collections.Generic
+open System.Reflection
 
 open TypeShape
 open TypeShape_Utils
@@ -14,6 +15,14 @@ let generatePickler<'T> (resolver : IPicklerResolver) (picklerFactories : TypeCa
 
     let mutable factory = Unchecked.defaultof<IPicklerResolver -> JsonPickler<'T>>
     if picklerFactories.TryGetValue(&factory) then factory resolver else
+
+    match typeof<'T>.GetCustomAttributes<PicklerAttribute<'T>>(false) |> Seq.tryPick Some with
+    | Some attr -> attr :> JsonPickler<'T>
+    | None ->
+
+    match typeof<'T>.GetCustomAttributes<PicklerFactoryAttribute<'T>>(false) |> Seq.tryPick Some with
+    | Some attr -> attr.Create resolver
+    | None ->
 
     match shapeof<'T> with
     | Shape.Unit -> UnitPickler<unit>(()) |> EQ

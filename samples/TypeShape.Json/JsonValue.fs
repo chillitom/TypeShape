@@ -10,6 +10,7 @@ type internal JsonNumberVal =
     | Float of double
     | String of string
 
+[<JsonNumberPicklerFactory>]
 [<Struct; StructuredFormatDisplay("{SFD}"); NoEquality; NoComparison>]
 type JsonNumber internal (value : JsonNumberVal) =
     member __.ToString(fmt : IFormatProvider) =
@@ -85,6 +86,25 @@ type JsonNumber internal (value : JsonNumberVal) =
     static member op_Explicit(number : JsonNumber) = number.AsDouble()
     static member op_Explicit(number : JsonNumber) = number.AsBigInteger()
 
+and private JsonNumberPicklerFactory() =
+    inherit PicklerFactoryAttribute<JsonNumber>()
+    override __.Create _ =
+        { new JsonPickler<JsonNumber> with
+            member __.Pickle w n =
+                match n.Value with
+                | Decimal d -> w.WriteValue d
+                | Float d -> w.WriteValue d
+                | String s -> w.String s
+
+            member __.UnPickle r =
+                let tok = r.NextToken()
+                match tok.Tag with
+                | JsonTag.Null
+                | JsonTag.False -> JsonNumber 0
+                | JsonTag.True -> JsonNumber 1
+                | JsonTag.Number -> JsonNumber tok.Value 
+                | JsonTag.String when isNumber tok.Value -> JsonNumber tok.Value
+                | _ -> unexpectedToken tok }
 
 [<CompilationRepresentation(CompilationRepresentationFlags.UseNullAsTrueValue)>]
 [<RequireQualifiedAccess; NoEquality; NoComparison>] 
@@ -177,6 +197,7 @@ module private JsonValueImpl =
         | JsonExpr.String s -> parse fmt s
         | _ -> cannotCoerce expr
 
+[<JsonValuePicklerFactory>]
 [<Struct; NoEquality; NoComparison; StructuredFormatDisplay("{SFD}")>]
 type JsonValue internal (expr : JsonExpr) =
     member internal __.Expr = expr
@@ -193,10 +214,12 @@ type JsonValue internal (expr : JsonExpr) =
         let expr = parseJson reader
         JsonValue expr
 
-type JsonValuePickler() =
-    interface JsonPickler<JsonValue> with
-        member __.Pickle writer jval = formatJson writer jval.Expr
-        member __.UnPickle reader = let expr = parseJson reader in JsonValue expr
+and private JsonValuePicklerFactory() =
+    inherit PicklerFactoryAttribute<JsonValue>()
+    override __.Create _ =
+        { new JsonPickler<JsonValue> with
+            member __.Pickle writer jval = formatJson writer jval.Expr
+            member __.UnPickle reader = let expr = parseJson reader in JsonValue expr }
 
 type JsonValue with
 
