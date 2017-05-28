@@ -112,7 +112,7 @@ let generatePickler<'T> (resolver : IPicklerResolver) (picklerFactories : TypeCa
     | Shape.CliMutable (:? ShapeCliMutable<'T> as shape) ->
         RecordPickler<'T>(resolver, shape.CreateUninitialized, shape.Properties) |> EQ
 
-    | _ -> raise <| NonSerializableTypeException(typeof<'T>)
+    | _ -> raise <| NonSerializableTypeException<'T>()
 
 
 let resolve<'T> (cache : TypeCache) (picklerFactories : TypeCache) : JsonPickler<'T> =

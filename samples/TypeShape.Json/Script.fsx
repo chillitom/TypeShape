@@ -5,30 +5,29 @@ open Vardusia
 open System.Reflection
 
 let json =
-    JsonValue.array 
-        [ 
-            JsonValue.obj [
-                "foo" => JsonValue.num 42 ; 
-                "bar" => JsonValue.num Double.PositiveInfinity
-                "baz" => JsonValue.array [JsonValue.num 1 ; JsonValue.num 2]
-                "bazz" => JsonValue.array []
-                "asa" => JsonValue.obj []
-            ] 
+    jval.array [ 
+        jval.obj [
+            "foo" => jval.num 42 ; 
+            "bar" => jval.num Double.PositiveInfinity
+            "baz" => jval.array [jval.num 1 ; jval.num 2]
+            "zap" => jval.array []
+            "asa" => jval.obj []
+        ] 
             
-            JsonValue.Null
+        jval.jnull
 
-            JsonValue.num 42
+        jval.num 42
 
-            JsonValue.bool true
+        jval.bool true
 
-            JsonValue.string """{ "some" : "json", "here" : true }""" 
-        ]
+        jval.string """{ "some" : "json", "here" : true }""" 
+    ]
 
 
-Pickler.pickle Pickler.auto<JsonValue>  json
+Pickler.pickle Pickler.auto<JsonValue> json
 
-json.ToJsonString(indent = Indent.Spaces 2) |> printfn "%s"
-let string = json.ToJsonString(indent = Indent.Compact) |> JsonValue.Parse
+json.ToJsonString() |> printfn "%s"
+let string = json.ToJsonString() |> JsonValue.Parse
 
 open System.Reflection
 type Foo = { A : string option ; B : int list ; FlAgs : System.Reflection.BindingFlags ; Date : DateTimeOffset ; TimeSpan : TimeSpan }
@@ -39,7 +38,7 @@ let pr = Pickler.auto<Tree>
 
 let serializer = new JsonSerializer()
 
-serializer.Pickle({ Value = 2 ; Nested = Some { Value = 2 ; Nested = None } }, indent = Indent.Spaces 2)
+serializer.Pickle({ Value = 2 ; Nested = Some { Value = 2 ; Nested = None } }, indent = 2)
 
 Pickler.pickle pr { Value = 2 ; Nested = Some { Value = 2 ; Nested = None } }
 |> Pickler.unpickle pr
@@ -50,7 +49,7 @@ let record = { A = Some "f00"; B = [1 .. 10] ; Date = DateTimeOffset.Now ; TimeS
 Pickler.pickle pr2 record |> Pickler.unpickle pr2
 
 Console.WriteLine string
-let r = JsonValue.Parse <| json.ToJsonString(indent = Indent.Spaces 2)
+let r = JsonValue.Parse <| json.ToJsonString(indent = 2)
 
 type Union =
     | A

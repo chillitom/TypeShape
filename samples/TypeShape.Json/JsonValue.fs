@@ -5,10 +5,11 @@ open System.Globalization
 open System.Collections.Generic
 open System.Numerics
 
+[<NoEquality; NoComparison>]
 type internal JsonNumberVal =
     | Decimal of decimal
     | Float of double
-    | String of string
+    | Formatted of string * IFormatProvider
 
 [<JsonNumberPicklerFactory>]
 [<Struct; StructuredFormatDisplay("{SFD}"); NoEquality; NoComparison>]
@@ -17,13 +18,19 @@ type JsonNumber internal (value : JsonNumberVal) =
         match value with
         | Decimal d -> format fmt d
         | Float d -> format fmt d
-        | String s -> s
+        | Formatted (s,_) -> s
 
     member private __.SFD = __.ToString CultureInfo.InvariantCulture
     member internal __.Value = value
     override __.ToString() = __.ToString CultureInfo.InvariantCulture
 
-    internal new (value : string) = JsonNumber(String value)
+    new (value : string, [<O;D(null : FP)>]fmt : IFormatProvider) = 
+        let fmt = getDefaultFmt fmt
+        if not <| isNumber fmt value then
+            invalidArg "value" "JsonValue: input string was not a valid number representation."
+
+        JsonNumber(Formatted (value, fmt))
+
     new(value : byte) = JsonNumber(Decimal (decimal value))
     new(value : sbyte) = JsonNumber(Decimal (decimal value))
     new(value : int16) = JsonNumber(Decimal (decimal value))
@@ -35,56 +42,45 @@ type JsonNumber internal (value : JsonNumberVal) =
     new(value : decimal) = JsonNumber(Decimal value)
     new(value : single) = JsonNumber(Float (double value))
     new(value : double) = JsonNumber(Float value)
-    new(bigint : bigint) = JsonNumber(String (format CultureInfo.InvariantCulture bigint))
+    new(bigint : bigint) = 
+        let fmt = CultureInfo.InvariantCulture
+        JsonNumber(Formatted (format fmt bigint, fmt))
 
-    member __.AsByte ([<O;D(null : FP)>]fmt : IFormatProvider) =
-        match value with Decimal d -> byte d | Float d -> byte d | String s -> parse fmt s
+    static member op_Explicit(number : JsonNumber) =
+        match number.Value with Decimal d -> byte d | Float d -> byte d | Formatted(s,fmt) -> parse fmt s
 
-    member __.AsSByte ([<O;D(null : FP)>]fmt : IFormatProvider) =
-        match value with Decimal d -> sbyte d | Float d -> sbyte d | String s -> parse fmt s
+    static member op_Explicit(number : JsonNumber) =
+        match number.Value with Decimal d -> sbyte d | Float d -> sbyte d | Formatted(s,fmt) -> parse fmt s
 
-    member __.AsInt16 ([<O;D(null : FP)>]fmt : IFormatProvider) =
-        match value with Decimal d -> int16 d | Float d -> int16 d | String s -> parse fmt s
+    static member op_Explicit(number : JsonNumber) =
+        match number.Value with Decimal d -> int16 d | Float d -> int16 d | Formatted(s,fmt) -> parse fmt s
 
-    member __.AsInt32 ([<O;D(null : FP)>]fmt : IFormatProvider) =
-        match value with Decimal d -> int32 d | Float d -> int32 d | String s -> parse fmt s
+    static member op_Explicit(number : JsonNumber) =
+        match number.Value with Decimal d -> int32 d | Float d -> int32 d | Formatted(s,fmt) -> parse fmt s
 
-    member __.AsInt64 ([<O;D(null : FP)>]fmt : IFormatProvider) =
-        match value with Decimal d -> int64 d | Float d -> int64 d | String s -> parse fmt s
+    static member op_Explicit(number : JsonNumber) =
+        match number.Value with Decimal d -> int64 d | Float d -> int64 d | Formatted(s,fmt) -> parse fmt s
 
-    member __.AsUInt16 ([<O;D(null : FP)>]fmt : IFormatProvider) =
-        match value with Decimal d -> uint16 d | Float d -> uint16 d | String s -> parse fmt s
+    static member op_Explicit(number : JsonNumber) =
+        match number.Value with Decimal d -> uint16 d | Float d -> uint16 d | Formatted(s,fmt) -> parse fmt s
 
-    member __.AsUInt32 ([<O;D(null : FP)>]fmt : IFormatProvider) =
-        match value with Decimal d -> uint32 d | Float d -> uint32 d | String s -> parse fmt s
+    static member op_Explicit(number : JsonNumber) =
+        match number.Value with Decimal d -> uint32 d | Float d -> uint32 d | Formatted(s,fmt) -> parse fmt s
 
-    member __.AsUInt64 ([<O;D(null : FP)>]fmt : IFormatProvider) =
-        match value with Decimal d -> uint64 d | Float d -> uint64 d | String s -> parse fmt s
+    static member op_Explicit(number : JsonNumber) =
+        match number.Value with Decimal d -> uint64 d | Float d -> uint64 d | Formatted(s,fmt) -> parse fmt s
 
-    member __.AsDecimal ([<O;D(null : FP)>]fmt : IFormatProvider) =
-        match value with Decimal d -> d | Float d -> decimal d | String s -> parse fmt s
+    static member op_Explicit(number : JsonNumber) =
+        match number.Value with Decimal d -> d | Float d -> decimal d | Formatted(s,fmt) -> parse fmt s
 
-    member __.AsSingle ([<O;D(null : FP)>]fmt : IFormatProvider) =
-        match value with Decimal d -> single d | Float d -> single d | String s -> parse fmt s
+    static member op_Explicit(number : JsonNumber) =
+        match number.Value with Decimal d -> single d | Float d -> single d | Formatted(s,fmt) -> parse fmt s
 
-    member __.AsDouble ([<O;D(null : FP)>]fmt : IFormatProvider) =
-        match value with Decimal d -> double d | Float d -> d | String s -> parse fmt s
+    static member op_Explicit(number : JsonNumber) =
+        match number.Value with Decimal d -> double d | Float d -> d | Formatted(s,fmt) -> parse fmt s
 
-    member __.AsBigInteger ([<O;D(null : FP)>]fmt : IFormatProvider) =
-        match value with Decimal d -> bigint d | Float d -> bigint d | String s -> parse fmt s
-
-    static member op_Explicit(number : JsonNumber) = number.AsByte()
-    static member op_Explicit(number : JsonNumber) = number.AsSByte()
-    static member op_Explicit(number : JsonNumber) = number.AsInt16()
-    static member op_Explicit(number : JsonNumber) = number.AsInt32()
-    static member op_Explicit(number : JsonNumber) = number.AsInt64()
-    static member op_Explicit(number : JsonNumber) = number.AsUInt16()
-    static member op_Explicit(number : JsonNumber) = number.AsUInt32()
-    static member op_Explicit(number : JsonNumber) = number.AsUInt64()
-    static member op_Explicit(number : JsonNumber) = number.AsDecimal()
-    static member op_Explicit(number : JsonNumber) = number.AsSingle()
-    static member op_Explicit(number : JsonNumber) = number.AsDouble()
-    static member op_Explicit(number : JsonNumber) = number.AsBigInteger()
+    static member op_Explicit(number : JsonNumber) =
+        match number.Value with Decimal d -> bigint d | Float d -> bigint d | Formatted(s,fmt) -> parse fmt s
 
 and private JsonNumberPicklerFactory() =
     inherit PicklerFactoryAttribute<JsonNumber>()
@@ -94,7 +90,7 @@ and private JsonNumberPicklerFactory() =
                 match n.Value with
                 | Decimal d -> w.WriteValue d
                 | Float d -> w.WriteValue d
-                | String s -> w.String s
+                | Formatted (s,_) -> w.WriteString s
 
             member __.UnPickle r =
                 let tok = r.NextToken()
@@ -102,8 +98,8 @@ and private JsonNumberPicklerFactory() =
                 | JsonTag.Null
                 | JsonTag.False -> JsonNumber 0
                 | JsonTag.True -> JsonNumber 1
-                | JsonTag.Number -> JsonNumber tok.Value 
-                | JsonTag.String when isNumber r.Format tok.Value -> JsonNumber tok.Value
+                | JsonTag.Number -> JsonNumber(Formatted (tok.Value, r.Format))
+                | JsonTag.String when isNumber r.Format tok.Value -> JsonNumber(Formatted (tok.Value, r.Format))
                 | _ -> unexpectedToken tok }
 
 [<JsonValuePicklerFactory>]
@@ -119,33 +115,33 @@ type JsonValue =
 and JsonValuePickler() =
     let rec pickle (writer : JsonWriter) (value : JsonValue) =
         match value with
-        | JsonValue.Null -> writer.Null()
-        | JsonValue.Bool b -> writer.Bool b
+        | JsonValue.Null -> writer.WriteNull()
+        | JsonValue.Bool b -> writer.WriteBool b
         | JsonValue.Number num -> 
             match num.Value with
             | Decimal d -> writer.WriteValue d
             | Float d -> writer.WriteValue d
-            | String s -> writer.Number s
+            | Formatted (s,_) -> writer.WriteNumber s
 
         | JsonValue.String s -> writer.WriteValue s
         | JsonValue.Array items ->
-            writer.StartArray()
+            writer.WriteStartArray()
             for item in items do pickle writer item
-            writer.EndArray()
+            writer.WriteEndArray()
 
         | JsonValue.Object items ->
-            writer.StartObject()
+            writer.WriteStartObject()
             for item in items do
-                writer.Key item.Key
+                writer.WriteKey item.Key
                 pickle writer item.Value
-            writer.EndObject()
+            writer.WriteEndObject()
 
     let rec unpickle (reader : JsonReader) (token : JsonToken) =
         match token.Tag with
         | JsonTag.Null -> JsonValue.Null
         | JsonTag.False -> JsonValue.Bool false
         | JsonTag.True -> JsonValue.Bool true
-        | JsonTag.Number -> JsonValue.Number (JsonNumber token.Value)
+        | JsonTag.Number -> JsonValue.Number (JsonNumber (Formatted (token.Value, reader.Format)))
         | JsonTag.String -> JsonValue.String token.Value
         | JsonTag.StartArray ->
             let ra = ResizeArray()
@@ -202,16 +198,16 @@ module private JsonValueImpl =
         | JsonValue.Null -> nullVal
         | JsonValue.Bool b -> if b then LanguagePrimitives.GenericOne else LanguagePrimitives.GenericZero
         | JsonValue.Number n -> f n
-        | JsonValue.String s -> parse fmt s
+        | JsonValue.String s -> parse (getDefaultFmt fmt) s
         | _ -> cannotCoerce expr
 
 
 type JsonValue with
 
-    member jval.ToJsonString([<O;D(Indent.None)>]indent : Indent, [<O;D(null : FP)>]format : IFormatProvider) : string =
+    member jval.ToJsonString([<O;D(2)>]indent : int, [<O;D(null : FP)>]format : IFormatProvider) : string =
         let writer = JsonWriter(indent, format)
         pickler.Pickle writer jval
-        writer.ToJson()
+        writer.ToJsonString()
 
     static member Parse(json : string, [<O;D(null : FP)>]format : IFormatProvider) : JsonValue =
         let reader = JsonReader(json, format) 
@@ -219,6 +215,7 @@ type JsonValue with
 
 
 type JsonValue with
+    static member inline jnull = JsonValue.Null
     static member inline bool (bool : bool) = JsonValue.Bool bool
     static member inline string (string : string) = JsonValue.String string
 
@@ -265,19 +262,22 @@ type JsonValue with
 
         | e -> cannotCoerce e
 
-    member jv.AsInt16([<O;D(null : FP)>]fmt : IFormatProvider) = parseNumeric fmt 0s (fun n -> n.AsInt16 fmt) jv
-    member jv.AsInt32([<O;D(null : FP)>]fmt : IFormatProvider) = parseNumeric fmt 0 (fun n -> n.AsInt32 fmt) jv
-    member jv.AsInt64([<O;D(null : FP)>]fmt : IFormatProvider) = parseNumeric fmt 0L (fun n -> n.AsInt64 fmt) jv
-    member jv.AsUInt16([<O;D(null : FP)>]fmt : IFormatProvider) = parseNumeric fmt 0us (fun n -> n.AsUInt16 fmt) jv
-    member jv.AsUInt32([<O;D(null : FP)>]fmt : IFormatProvider) = parseNumeric fmt 0u (fun n -> n.AsUInt32 fmt) jv
-    member jv.AsUInt64([<O;D(null : FP)>]fmt : IFormatProvider) = parseNumeric fmt 0uL (fun n -> n.AsUInt64 fmt) jv
-    member jv.AsSingle([<O;D(null : FP)>]fmt : IFormatProvider) = parseNumeric fmt Single.NaN (fun n -> n.AsSingle fmt) jv
-    member jv.AsDouble([<O;D(null : FP)>]fmt : IFormatProvider) = parseNumeric fmt Double.NaN (fun n -> n.AsDouble fmt) jv
-    member jv.AsDecimal([<O;D(null : FP)>]fmt : IFormatProvider) = parseNumeric fmt 0M (fun n -> n.AsDecimal fmt) jv
-    member jv.AsBigInteger([<O;D(null : FP)>]fmt : IFormatProvider) = parseNumeric fmt 0I (fun n -> n.AsBigInteger fmt) jv
+    member jv.AsInt16([<O;D(null : FP)>]fmt : IFormatProvider) = parseNumeric fmt 0s int16 jv
+    member jv.AsInt32([<O;D(null : FP)>]fmt : IFormatProvider) = parseNumeric fmt 0 int32 jv
+    member jv.AsInt64([<O;D(null : FP)>]fmt : IFormatProvider) = parseNumeric fmt 0L int64 jv
+    member jv.AsUInt16([<O;D(null : FP)>]fmt : IFormatProvider) = parseNumeric fmt 0us uint16 jv
+    member jv.AsUInt32([<O;D(null : FP)>]fmt : IFormatProvider) = parseNumeric fmt 0u uint32 jv
+    member jv.AsUInt64([<O;D(null : FP)>]fmt : IFormatProvider) = parseNumeric fmt 0uL uint64 jv
+    member jv.AsSingle([<O;D(null : FP)>]fmt : IFormatProvider) = parseNumeric fmt Single.NaN single jv
+    member jv.AsDouble([<O;D(null : FP)>]fmt : IFormatProvider) = parseNumeric fmt Double.NaN double jv
+    member jv.AsDecimal([<O;D(null : FP)>]fmt : IFormatProvider) = parseNumeric fmt 0M decimal jv
+    member jv.AsBigInteger([<O;D(null : FP)>]fmt : IFormatProvider) = parseNumeric fmt 0I JsonNumber.op_Explicit jv
 
 [<AutoOpen>]
 module JsonValueHelpers =
+
+    type jnum = JsonNumber
+    type jval = JsonValue
 
     let inline (=>) key value = KeyValuePair(key, value)
 

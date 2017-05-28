@@ -45,19 +45,19 @@ and PicklerCache(?builder : PicklerCacheBuilder) =
     static member internal DefaultCache = defaultCache
 
 
-type JsonSerializer(?cache : PicklerCache, [<O;D(null)>]?indent : Indent, [<O;D(null)>]?format : IFormatProvider) =
+type JsonSerializer(?cache : PicklerCache, [<O;D(null)>]?indent : int, [<O;D(null)>]?format : IFormatProvider) =
     let cache = defaultArg cache PicklerCache.DefaultCache
 
-    member val Indent = defaultArg indent Indent.None with get, set
+    member val Indent = defaultArg indent 2 with get, set
     member val Format = defaultArg format (CultureInfo.InvariantCulture :> _) with get, set
 
-    member __.Pickle<'T>(value : 'T, [<O;D(null)>]?pickler : JsonPickler<'T>, [<O;D(null)>]?indent : Indent, [<O;D(null)>]?format : IFormatProvider) : string =
+    member __.Pickle<'T>(value : 'T, [<O;D(null)>]?pickler : JsonPickler<'T>, [<O;D(null)>]?indent : int, [<O;D(null)>]?format : IFormatProvider) : string =
         let pickler = match pickler with None -> cache.Resolve<'T>() | Some p -> p
         let format = defaultArg format __.Format
         let indent = defaultArg indent __.Indent
         let writer = new JsonWriter(indent, format)
         pickler.Pickle writer value
-        writer.ToJson()
+        writer.ToJsonString()
 
     member __.UnPickle<'T>(json : string, [<O;D(null)>]?pickler : JsonPickler<'T>, [<O;D(null)>]?format : IFormatProvider) : 'T =
         let pickler = match pickler with None -> cache.Resolve<'T>() | Some p -> p

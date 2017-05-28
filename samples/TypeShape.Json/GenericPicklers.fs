@@ -15,7 +15,7 @@ type FSharpOptionPickler<'T>(pickler : JsonPickler<'T>) =
     interface JsonPickler<'T option> with
         member __.Pickle writer tOpt =
             match tOpt with
-            | None -> writer.Null()
+            | None -> writer.WriteNull()
             | Some t -> pickler.Pickle writer t
 
         member __.UnPickle reader =
@@ -58,7 +58,7 @@ type NullablePickler<'T when 'T : struct
     interface JsonPickler<Nullable<'T>> with
         member __.Pickle writer t =
             if t.HasValue then pickler.Pickle writer t.Value
-            else writer.Null()
+            else writer.WriteNull()
 
         member __.UnPickle reader =
             let tok = reader.PeekToken()
@@ -70,9 +70,9 @@ type NullablePickler<'T when 'T : struct
 type CollectionPickler<'Collection, 'T when 'Collection :> seq<'T>> (ctor : ResizeArray<'T> -> 'Collection, tpickler : JsonPickler<'T>) =
     interface JsonPickler<'Collection> with
         member __.Pickle writer ts =
-            writer.StartArray()
+            writer.WriteStartArray()
             for t in ts do tpickler.Pickle writer t
-            writer.EndArray()
+            writer.WriteEndArray()
 
         member __.UnPickle reader =
             let _ = reader.EnsureToken JsonTag.StartArray
@@ -95,12 +95,12 @@ type JsonField<'Value> = KeyValuePair<string, 'Value>
 type DictionaryPickler<'Dict, 'Value when 'Dict :> seq<JsonField<'Value>>> (ctor : ResizeArray<JsonField<'Value>> -> 'Dict, vpickler : JsonPickler<'Value>) =
     interface JsonPickler<'Dict> with
         member __.Pickle writer map =
-            writer.StartObject()
+            writer.WriteStartObject()
             for kv in map do
-                writer.Key kv.Key
+                writer.WriteKey kv.Key
                 vpickler.Pickle writer kv.Value
 
-            writer.EndObject()
+            writer.WriteEndObject()
 
         member __.UnPickle reader =
             let _ = reader.EnsureToken JsonTag.StartObject
@@ -139,7 +139,7 @@ let private mkFieldPickler (resolver : IPicklerResolver) (shapeField : IShapeWri
             { new IFieldPickler<'T> with
                 member __.Pickle writer t = 
                     let field = shape.Project t
-                    writer.Key label
+                    writer.WriteKey label
                     fp.Pickle writer field
 
                 member __.UnPickle reader t =
@@ -158,9 +158,9 @@ type RecordPickler<'TRecord> (resolver : IPicklerResolver, ctor : unit -> 'TReco
 
     interface JsonPickler<'TRecord> with
         member __.Pickle writer record =
-            writer.StartObject()
+            writer.WriteStartObject()
             for p in picklers do p.Pickle writer record
-            writer.EndObject()
+            writer.WriteEndObject()
 
         member __.UnPickle reader =
             let _ = reader.EnsureToken JsonTag.StartObject
@@ -192,19 +192,19 @@ type FSharpUnionPickler<'TUnion> (resolver : IPicklerResolver, shape : ShapeFSha
 
     interface JsonPickler<'TUnion> with
         member __.Pickle writer union =
-            writer.StartObject()
+            writer.WriteStartObject()
             let tag = shape.GetTag union
             let picklers = picklerss.[tag]
-            writer.Key unionCaseKey
-            writer.String tags.[tag]
+            writer.WriteKey unionCaseKey
+            writer.WriteString tags.[tag]
 
             if picklers.Length > 0 then
-                writer.Key unionFieldsKey
-                writer.StartObject()
+                writer.WriteKey unionFieldsKey
+                writer.WriteStartObject()
                 for p in picklers do p.Pickle writer union
-                writer.EndObject()
+                writer.WriteEndObject()
 
-            writer.EndObject()
+            writer.WriteEndObject()
 
         member __.UnPickle reader =
             let _ = reader.EnsureToken JsonTag.StartObject

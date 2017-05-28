@@ -4,16 +4,6 @@ open System
 open System.Collections.Generic
 open System.Text
 
-type Indent =
-    | Compact   = -1
-    | None      =  0
-
-[<RequireQualifiedAccess>]
-[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-module Indent =
-
-    let Spaces (spaces : int) = enum<Indent> spaces
-
 module private JsonWriterImpl =
     
     [<Flags>]
@@ -58,13 +48,12 @@ module private JsonWriterImpl =
                 | s -> append sb s
         append sb '"'
 
-    let inline appendComma (sb : StringBuilder) (indent : int) =
+    let inline appendComma (sb : StringBuilder) =
         append sb Constants.Comma
-        if indent >= 0 then append sb Constants.Space
 
     let inline appendColon (sb : StringBuilder) (indent : int) =
         append sb Constants.Colon
-        if indent >= 0 then append sb Constants.Space
+        if indent > 0 then append sb Constants.Space
 
     let inline markSequence (stack : Stack<JCtx>) =
         let c = stack.Pop()
@@ -76,7 +65,7 @@ module private JsonWriterImpl =
             raise <| VardusiaException("Cannot insert json values into objects.")
 
         elif hasFlag JCtx.Sequence ctx then 
-            appendComma sb indent
+            appendComma sb
             newLine indent stack sb
 
         elif hasFlag JCtx.Key ctx then
@@ -91,11 +80,9 @@ module private JsonWriterImpl =
             markSequence stack
 
 open JsonWriterImpl
-open System.Globalization
 
-type JsonWriter(indent : Indent, fmt : IFormatProvider) =
+type JsonWriter(indent : int, fmt : IFormatProvider) =
     let fmt = getDefaultFmt fmt
-    let intIndent = int indent
     let sb = new StringBuilder()
     let stack = new Stack<JCtx>(20)
     do stack.Push JCtx.Root
@@ -103,65 +90,65 @@ type JsonWriter(indent : Indent, fmt : IFormatProvider) =
     member __.Format = fmt
     member __.Indent = indent
 
-    member __.Null() =
-        checkForValue sb intIndent stack
+    member __.WriteNull() =
+        checkForValue sb indent stack
         append sb Constants.Null
 
-    member __.Bool bool = 
-        checkForValue sb intIndent stack
+    member __.WriteBool bool = 
+        checkForValue sb indent stack
         if bool then append sb Constants.True 
         else append sb Constants.False
 
-    member internal __.Number (number : string) = 
-        checkForValue sb intIndent stack
+    member internal __.WriteNumber (number : string) = 
+        checkForValue sb indent stack
         append sb number
 
-    member internal __.String (string : string) =
-        checkForValue sb intIndent stack
+    member internal __.WriteString (string : string) =
+        checkForValue sb indent stack
         appendEscaped sb string
 
-    member __.Key (name : string) =
+    member __.WriteKey (name : string) =
         if isNull name then raise <| new ArgumentNullException()
         let ctx = stack.Peek()
         if not <| hasFlag JCtx.Object ctx then
             raise <| VardusiaException("Json key identifiers can only be inserted in json objects")
 
-        if hasFlag JCtx.Sequence ctx then appendComma sb intIndent
-        newLine intIndent stack sb
+        if hasFlag JCtx.Sequence ctx then appendComma sb
+        newLine indent stack sb
 
         appendEscaped sb name
-        appendColon sb intIndent
+        appendColon sb indent
         stack.Push JCtx.Key
 
-    member __.StartObject() =
-        checkForValue sb intIndent stack
+    member __.WriteStartObject() =
+        checkForValue sb indent stack
         append sb Constants.StartObject
         stack.Push JCtx.Object
 
-    member __.StartArray() =
-        checkForValue sb intIndent stack
+    member __.WriteStartArray() =
+        checkForValue sb indent stack
         append sb Constants.StartArray
         stack.Push JCtx.Array
 
-    member __.EndObject() =
+    member __.WriteEndObject() =
         let ctx = stack.Peek()
         if not <| hasFlag JCtx.Object ctx then
             raise <| VardusiaException("Cannot insert EndObject token here.")
 
         let _ = stack.Pop()
-        if hasFlag JCtx.Sequence ctx then newLine intIndent stack sb
+        if hasFlag JCtx.Sequence ctx then newLine indent stack sb
         append sb Constants.EndObject
 
-    member __.EndArray() =
+    member __.WriteEndArray() =
         let ctx = stack.Peek()
         if not <| hasFlag JCtx.Array ctx then
             raise <| VardusiaException("Cannot insert EndArray token here.")
 
         let _ = stack.Pop()
-        if hasFlag JCtx.Sequence ctx then newLine intIndent stack sb
+        if hasFlag JCtx.Sequence ctx then newLine indent stack sb
         append sb Constants.EndArray 
 
-    member __.ToJson() = 
+    member __.ToJsonString() = 
         if stack.Count > 1 then
             raise <| VardusiaException("Attempting to export an incomplete JsonWriter.")
 
@@ -172,79 +159,79 @@ type JsonWriter with
 
     member jw.WriteValue(value : string) =
         match value with
-        | null -> jw.Null()
-        | _ -> jw.String value
+        | null -> jw.WriteNull()
+        | _ -> jw.WriteString value
     
     member jw.WriteValue(sbyte : sbyte) =
         let value = format jw.Format sbyte
-        jw.Number value
+        jw.WriteNumber value
 
     member jw.WriteValue(int16 : int16) =
         let value = format jw.Format int16
-        jw.Number value
+        jw.WriteNumber value
 
     member jw.WriteValue(int32 : int) =
         let value = format jw.Format int32
-        jw.Number value
+        jw.WriteNumber value
 
     member jw.WriteValue(int64 : int64) =
         let value = format jw.Format int64
-        jw.Number value
+        jw.WriteNumber value
 
     member jw.WriteValue(byte : byte) =
         let value = format jw.Format byte
-        jw.Number value
+        jw.WriteNumber value
 
     member jw.WriteValue(uint16 : uint16) =
         let value = format jw.Format uint16
-        jw.Number value
+        jw.WriteNumber value
 
     member jw.WriteValue(uint32 : uint32) =
         let value = format jw.Format uint32
-        jw.Number value
+        jw.WriteNumber value
 
     member jw.WriteValue(uint64 : uint64) =
         let value = format jw.Format uint64
-        jw.Number value
+        jw.WriteNumber value
 
     member jw.WriteValue(bigint : bigint) =
         let value = format jw.Format bigint
-        jw.Number value
+        jw.WriteNumber value
 
     member jw.WriteValue(single : single) =
-        if Single.IsNaN single then jw.Null()
-        elif Single.IsPositiveInfinity single then jw.String Constants.PositiveInfinity
-        elif Single.IsNegativeInfinity single then jw.String Constants.NegativeInfinity
+        if Single.IsNaN single then jw.WriteNull()
+        elif Single.IsPositiveInfinity single then jw.WriteString Constants.PositiveInfinity
+        elif Single.IsNegativeInfinity single then jw.WriteString Constants.NegativeInfinity
         else
             let value = format jw.Format single
-            jw.Number value
+            jw.WriteNumber value
 
     member jw.WriteValue(double : double) =
-        if Double.IsNaN double then jw.Null()
-        elif Double.IsPositiveInfinity double then jw.String Constants.PositiveInfinity
-        elif Double.IsNegativeInfinity double then jw.String Constants.NegativeInfinity
+        if Double.IsNaN double then jw.WriteNull()
+        elif Double.IsPositiveInfinity double then jw.WriteString Constants.PositiveInfinity
+        elif Double.IsNegativeInfinity double then jw.WriteString Constants.NegativeInfinity
         else
             let value = format jw.Format double
-            jw.Number value
+            jw.WriteNumber value
 
     member jw.WriteValue(decimal : decimal) =
         let value = format jw.Format decimal
-        jw.Number value
+        jw.WriteNumber value
 
     member jw.WriteValue(timespan : TimeSpan) =
         let fmt = timespan.ToString("G", jw.Format)
-        jw.String fmt
+        jw.WriteString fmt
 
     member jw.WriteValue(dateTime: DateTime) =
         let dto = DateTimeOffset(dateTime)
         let fmt = dto.ToString("o", jw.Format)
-        jw.String fmt
+        jw.WriteString fmt
 
     member jw.WriteValue(dateTimeOffset : DateTimeOffset) =
         let fmt = dateTimeOffset.ToString("o", jw.Format)
-        jw.String fmt
+        jw.WriteString fmt
 
     member jw.WriteValue(bytes : byte[]) =
         match bytes with
-        | null -> jw.Null()
-        | bytes -> jw.String(Convert.ToBase64String bytes)
+        | null -> jw.WriteNull()
+        | bytes -> jw.WriteString(Convert.ToBase64String bytes)

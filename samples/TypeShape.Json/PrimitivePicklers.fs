@@ -4,7 +4,7 @@ open System
 
 type UnitPickler<'unit>(unit : 'unit) =
     interface JsonPickler<'unit> with
-        member __.Pickle writer _ = writer.Null()
+        member __.Pickle writer _ = writer.WriteNull()
         member __.UnPickle reader =
             let tok = reader.NextToken()
             if tok.Tag = JsonTag.Null then unit
@@ -12,7 +12,7 @@ type UnitPickler<'unit>(unit : 'unit) =
 
 type BoolPickler() =
     interface JsonPickler<bool> with
-        member __.Pickle writer bool = writer.Bool bool
+        member __.Pickle writer bool = writer.WriteBool bool
         member __.UnPickle reader =
             let tok = reader.NextToken()
             tok.AsBoolean()
