@@ -16,12 +16,16 @@ let generatePickler<'T> (resolver : IPicklerResolver) (picklerFactories : TypeCa
     let mutable factory = Unchecked.defaultof<IPicklerResolver -> JsonPickler<'T>>
     if picklerFactories.TryGetValue(&factory) then factory resolver else
 
-    match typeof<'T>.GetCustomAttributes<PicklerAttribute<'T>>(false) |> Seq.tryPick Some with
-    | Some attr -> attr :> JsonPickler<'T>
-    | None ->
+    let attr = typeof<'T>.GetCustomAttributes<JsonTypeAttribute>(false) |> Seq.tryPick Some
 
-    match typeof<'T>.GetCustomAttributes<PicklerFactoryAttribute<'T>>(false) |> Seq.tryPick Some with
-    | Some attr -> attr.Create resolver
+    let requiredFields = attr |> Option.exists (fun attr -> attr.RequiredFields)
+
+    match attr with
+    | Some attr when attr.Pickler <> null -> extractPicklerFromType<'T> resolver attr.Pickler
+    | _ ->
+
+    match tryExtractPicklerFromToJsonMethods<'T> resolver with
+    | Some pickler -> pickler
     | None ->
 
     match shapeof<'T> with
@@ -104,13 +108,13 @@ let generatePickler<'T> (resolver : IPicklerResolver) (picklerFactories : TypeCa
                 mkMapPickler vpickler |> EQ }
 
     | Shape.FSharpRecord (:? ShapeFSharpRecord<'T> as shape) ->
-        RecordPickler<'T>(resolver, shape.CreateUninitialized, shape.Fields) |> EQ
+        RecordPickler<'T>(resolver, requiredFields, shape.CreateUninitialized, shape.Fields) |> EQ
 
     | Shape.FSharpUnion (:? ShapeFSharpUnion<'T> as shape) ->
-        FSharpUnionPickler<'T>(resolver, shape) |> EQ
+        FSharpUnionPickler<'T>(resolver, requiredFields, shape) |> EQ
 
     | Shape.CliMutable (:? ShapeCliMutable<'T> as shape) ->
-        RecordPickler<'T>(resolver, shape.CreateUninitialized, shape.Properties) |> EQ
+        RecordPickler<'T>(resolver, requiredFields, shape.CreateUninitialized, shape.Properties) |> EQ
 
     | _ -> raise <| NonSerializableTypeException<'T>()
 

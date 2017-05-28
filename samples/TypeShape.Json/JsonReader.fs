@@ -325,6 +325,7 @@ module private JsonReaderImpl =
 
 open JsonReaderImpl
 
+[<Sealed>]
 type JsonReader(input : string, format : IFormatProvider) =
     let format = getDefaultFmt format
     let mutable pos = 0

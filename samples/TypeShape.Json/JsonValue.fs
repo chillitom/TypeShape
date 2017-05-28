@@ -11,7 +11,7 @@ type internal JsonNumberVal =
     | Float of double
     | Formatted of string * IFormatProvider
 
-[<JsonNumberPicklerFactory>]
+[<JsonType(Pickler = typeof<JsonNumberPickler>)>]
 [<Struct; StructuredFormatDisplay("{SFD}"); NoEquality; NoComparison>]
 type JsonNumber internal (value : JsonNumberVal) =
     member __.ToString(fmt : IFormatProvider) =
@@ -82,27 +82,25 @@ type JsonNumber internal (value : JsonNumberVal) =
     static member op_Explicit(number : JsonNumber) =
         match number.Value with Decimal d -> bigint d | Float d -> bigint d | Formatted(s,fmt) -> parse fmt s
 
-and private JsonNumberPicklerFactory() =
-    inherit PicklerFactoryAttribute<JsonNumber>()
-    override __.Create _ =
-        { new JsonPickler<JsonNumber> with
-            member __.Pickle w n =
-                match n.Value with
-                | Decimal d -> w.WriteValue d
-                | Float d -> w.WriteValue d
-                | Formatted (s,_) -> w.WriteString s
+and private JsonNumberPickler() =
+    interface JsonPickler<JsonNumber> with
+        member __.Pickle w n =
+            match n.Value with
+            | Decimal d -> w.WriteValue d
+            | Float d -> w.WriteValue d
+            | Formatted (s,_) -> w.WriteString s
 
-            member __.UnPickle r =
-                let tok = r.NextToken()
-                match tok.Tag with
-                | JsonTag.Null
-                | JsonTag.False -> JsonNumber 0
-                | JsonTag.True -> JsonNumber 1
-                | JsonTag.Number -> JsonNumber(Formatted (tok.Value, r.Format))
-                | JsonTag.String when isNumber r.Format tok.Value -> JsonNumber(Formatted (tok.Value, r.Format))
-                | _ -> unexpectedToken tok }
+        member __.UnPickle r =
+            let tok = r.NextToken()
+            match tok.Tag with
+            | JsonTag.Null
+            | JsonTag.False -> JsonNumber 0
+            | JsonTag.True -> JsonNumber 1
+            | JsonTag.Number -> JsonNumber(Formatted (tok.Value, r.Format))
+            | JsonTag.String when isNumber r.Format tok.Value -> JsonNumber(Formatted (tok.Value, r.Format))
+            | _ -> unexpectedToken tok
 
-[<JsonValuePicklerFactory>]
+[<JsonType(Pickler = typeof<JsonValuePickler>)>]
 [<RequireQualifiedAccess; NoEquality; NoComparison>]
 type JsonValue =
     | Null
@@ -112,7 +110,7 @@ type JsonValue =
     | Array of JsonValue []
     | Object of KeyValuePair<string, JsonValue> []
 
-and JsonValuePickler() =
+and private JsonValuePickler() =
     let rec pickle (writer : JsonWriter) (value : JsonValue) =
         match value with
         | JsonValue.Null -> writer.WriteNull()
@@ -170,10 +168,6 @@ and JsonValuePickler() =
     interface JsonPickler<JsonValue> with
         member __.Pickle writer value = pickle writer value
         member __.UnPickle reader = let tok = reader.NextToken() in unpickle reader tok
-
-and private JsonValuePicklerFactory() =
-    inherit PicklerFactoryAttribute<JsonValue>()
-    override __.Create _ = JsonValuePickler() :> _
 
 [<AutoOpen>]
 module private JsonValueImpl =
@@ -284,6 +278,17 @@ module JsonValueHelpers =
     [<RequireQualifiedAccess>]
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module JsonValue =
+
+        let (|Field|_|) (key : string) (fields : KeyValuePair<string, JsonValue> []) =
+            fields |> Array.tryPickFast (function kv when kv.Key = key -> Some kv.Value | _ -> None)
+
+        let (|Element|_|) (index : int) (elements : JsonValue []) =
+            if index >= 0 && index < elements.Length then Some elements.[index]
+            else None
+
+    [<RequireQualifiedAccess>]
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+    module jval =
 
         let (|Field|_|) (key : string) (fields : KeyValuePair<string, JsonValue> []) =
             fields |> Array.tryPickFast (function kv when kv.Key = key -> Some kv.Value | _ -> None)

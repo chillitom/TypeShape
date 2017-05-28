@@ -2,6 +2,7 @@
 
 open System
 open System.Collections.Generic
+open System.Reflection
 
 open TypeShape
 open TypeShape_Utils
@@ -127,34 +128,94 @@ let mkDictPickler vpickler =
 
     DictionaryPickler<Dictionary<string, 'v>, 'v>(mkDict, vpickler)
 
+let extractPicklerFromType<'Target> (resolver : IPicklerResolver) (source : Type) =
+    match getParameterlessCtor source with
+    | null ->
+        sprintf "Pickler attribute type '%O' lacking a parameterless constructor." source
+        |> VardusiaException
+        |> raise
+
+    | ctor ->
+        match ctor.Invoke [||] with
+        | :? JsonPickler<'Target> as p -> p
+        | :? IPicklerFactory<'Target> as f -> f.Create resolver
+        | _ ->
+            sprintf "Pickler attribute type '%O' defines neither a pickler nor a pickler factory for type '%O'"
+                                            source                                                  typeof<'Target>
+            |> VardusiaException
+            |> raise
+
+let tryExtractPicklerFromToJsonMethods<'T> (resolver : IPicklerResolver) : JsonPickler<'T> option =
+    let methodBindings = BindingFlags.Static ||| BindingFlags.Public ||| BindingFlags.NonPublic
+    let toMethodName = "ToJson"
+    let fromMethodName = "FromJson"
+
+    match typeof<'T>.GetMethod(toMethodName, methodBindings, null, [|typeof<'T>|], [||]) with
+    | null -> None
+    | fromMethodInfo ->
+        let targetType = fromMethodInfo.ReturnType
+        match typeof<'T>.GetMethod(fromMethodName, methodBindings, null, [|targetType|], [||]) with
+        | null -> None
+        | toMethodInfo when toMethodInfo.ReturnType <> typeof<'T> -> None
+        | toMethodInfo ->
+            TypeShape.Create(targetType).Accept {
+                new ITypeShapeVisitor<JsonPickler<'T>> with
+                    member __.Visit<'Target>() =
+                        let targetPickler = resolver.Resolve<'Target>()
+                        let fromMethod = wrapDelegate<Func<'T,'Target>> fromMethodInfo
+                        let toMethod = wrapDelegate<Func<'Target, 'T>> toMethodInfo
+                        { new JsonPickler<'T> with
+                            member __.Pickle writer t = 
+                                let target = fromMethod.Invoke t
+                                targetPickler.Pickle writer target
+
+                            member __.UnPickle reader =
+                                let target = targetPickler.UnPickle reader
+                                toMethod.Invoke target } }
+            |> Some
+
 type private IFieldPickler<'T> =
+    abstract IsRequired : bool
+    abstract Label : string
     abstract Pickle : JsonWriter -> 'T -> unit
     abstract UnPickle : JsonReader -> 'T -> 'T
 
-let private mkFieldPickler (resolver : IPicklerResolver) (shapeField : IShapeWriteMember<'T>) =
+let private mkFieldPickler (resolver : IPicklerResolver) isRequired (shapeField : IShapeWriteMember<'T>) =
     shapeField.Accept { new IWriteMemberVisitor<'T, IFieldPickler<'T>> with
         member __.Visit(shape : ShapeWriteMember<'T, 'Field>) =
-            let fp = resolver.Resolve<'Field>()
-            let label = shape.Label
+            let propAttr = shape.MemberInfo.GetCustomAttributes<JsonPropertyAttribute>() |> Seq.tryPick Some
+            let label = 
+                match propAttr with
+                | Some attr when attr.Label <> null -> attr.Label
+                | _ -> shape.Label
+
+            let pickler = 
+                match propAttr with
+                | Some attr when attr.Pickler <> null -> extractPicklerFromType<'Field> resolver attr.Pickler
+                | _ -> resolver.Resolve<'Field>()
+
+            let required = isRequired || propAttr |> Option.exists (fun attr -> attr.Required)
+
             { new IFieldPickler<'T> with
+                member __.Label = label
+                member __.IsRequired = required
                 member __.Pickle writer t = 
                     let field = shape.Project t
                     writer.WriteKey label
-                    fp.Pickle writer field
+                    pickler.Pickle writer field
 
                 member __.UnPickle reader t =
-                    let field = fp.UnPickle reader
-                    shape.Inject t field }
-    }
+                    let field = pickler.UnPickle reader
+                    shape.Inject t field } }
 
-let private mkFieldPicklers resolver (fields : seq<IShapeWriteMember<'T>>) =
-    let fields = Seq.toArray fields
-    fields |> Array.map (fun f -> f.Label, mkFieldPickler resolver f)
+let private mkFieldPicklers resolver allFieldsRequired (fields : IShapeWriteMember<'T>[]) =
+    fields |> Array.map (mkFieldPickler resolver allFieldsRequired)
 
 
-type RecordPickler<'TRecord> (resolver : IPicklerResolver, ctor : unit -> 'TRecord, fields : IShapeWriteMember<'TRecord>[]) =
-    let labels, picklers = mkFieldPicklers resolver fields |> Array.unzip
-    let index = BinSearch labels
+type RecordPickler<'TRecord> (resolver : IPicklerResolver, allFieldsRequired, ctor : unit -> 'TRecord, fields : IShapeWriteMember<'TRecord>[]) =
+    let picklers = mkFieldPicklers resolver allFieldsRequired fields
+    let flags = picklers |> Array.map (fun p -> p.IsRequired)
+    let index = BinSearch (picklers |> Array.map (fun p -> p.Label))
 
     interface JsonPickler<'TRecord> with
         member __.Pickle writer record =
@@ -166,28 +227,33 @@ type RecordPickler<'TRecord> (resolver : IPicklerResolver, ctor : unit -> 'TReco
             let _ = reader.EnsureToken JsonTag.StartObject
             let mutable record = ctor()
             let mutable tok = reader.NextToken()
+            let flags = Array.clone flags
             while tok.Tag <> JsonTag.EndObject do
                 let label = tok.AsKey()
                 match index.TryFindIndex label with
-                | i when i >= 0 -> record <- picklers.[i].UnPickle reader record
+                | i when i >= 0 -> 
+                    flags.[i] <- false
+                    record <- picklers.[i].UnPickle reader record
                 | _ -> reader.ConsumeValue()
 
                 tok <- reader.NextToken()
 
-            record
+            match Array.IndexOf(flags, true) with
+            | i when i >= 0 ->
+                sprintf "JSON missing required field '%s' for type '%O'." index.Values.[i] typeof<'TRecord>
+                |> VardusiaException
+                |> raise
+
+            | _ -> record
 
 let [<Literal>] private unionCaseKey = "case"
 let [<Literal>] private unionFieldsKey = "fields"
 
-type FSharpUnionPickler<'TUnion> (resolver : IPicklerResolver, shape : ShapeFSharpUnion<'TUnion>) =
-    let labelss, picklerss, tags = 
-        shape.UnionCases 
-        |> Array.map (fun c -> 
-            let labels = c.Fields |> Array.map (fun c -> c.Label) |> BinSearch
-            let picklers = c.Fields |> Array.map (mkFieldPickler resolver)
-            labels, picklers, c.CaseInfo.Name)
-        |> Array.unzip3
-
+type FSharpUnionPickler<'TUnion> (resolver : IPicklerResolver, allFieldsRequired : bool, shape : ShapeFSharpUnion<'TUnion>) =
+    let picklerss = shape.UnionCases |> Array.map (fun uc -> uc.Fields |> mkFieldPicklers resolver allFieldsRequired)
+    let labelss = picklerss |> Array.map (fun picklers -> picklers |> Array.map (fun p -> p.Label) |> BinSearch)
+    let flagss = picklerss |> Array.map (fun picklers -> picklers |> Array.map (fun p -> p.IsRequired))
+    let tags = shape.UnionCases |> Array.map (fun uc -> uc.CaseInfo.Name)
     let caseIndex = BinSearch tags
 
     interface JsonPickler<'TUnion> with
@@ -226,23 +292,33 @@ type FSharpUnionPickler<'TUnion> (resolver : IPicklerResolver, shape : ShapeFSha
 
             let labels = labelss.[tag]
             let picklers = picklerss.[tag]
+            let flags = Array.clone flagss.[tag]
             let mutable record = shape.UnionCases.[tag].CreateUninitialized()
             
             tok <- reader.NextToken()
             match tok.Tag with
-            | JsonTag.EndObject -> record
+            | JsonTag.EndObject -> ()
             | JsonTag.Key when tok.Value = unionFieldsKey ->
                 let _ = reader.EnsureToken JsonTag.StartObject
                 tok <- reader.NextToken()
                 while tok.Tag <> JsonTag.EndObject do
                     let label = tok.AsKey()
                     match labels.TryFindIndex label with
-                    | i when i >= 0 -> record <- picklers.[i].UnPickle reader record
+                    | i when i >= 0 -> 
+                        flags.[i] <- false
+                        record <- picklers.[i].UnPickle reader record
                     | _ -> reader.ConsumeValue()
 
                     tok <- reader.NextToken()
 
                 let _ = reader.EnsureToken JsonTag.EndObject
-                record
+                ()
 
             | _ -> unexpectedToken tok
+
+            match Array.IndexOf(flags, true) with
+            | i when i >= 0 ->
+                sprintf "JSON missing required field '%s' for type '%O.%s'." labels.Values.[i] typeof<'TUnion> tags.[tag]
+                |> VardusiaException
+                |> raise
+            | _ -> record

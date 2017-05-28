@@ -9,18 +9,18 @@ type JsonPickler<'T> =
 type IPicklerResolver =
     abstract Resolve<'T> : unit -> JsonPickler<'T>
 
-[<AbstractClass>]
-[<AttributeUsage(AttributeTargets.Class ||| AttributeTargets.Property, AllowMultiple = false)>]
-type PicklerAttribute<'T>() =
-    inherit Attribute()
-    abstract Pickle : JsonWriter -> 'T -> unit
-    abstract UnPickle : JsonReader -> 'T
-    interface JsonPickler<'T> with
-        member __.Pickle w t = __.Pickle w t
-        member __.UnPickle r = __.UnPickle r
+type IPicklerFactory<'T> =
+    abstract Create<'T> : IPicklerResolver -> JsonPickler<'T>
 
-[<AbstractClass>]
-[<AttributeUsage(AttributeTargets.Class ||| AttributeTargets.Property, AllowMultiple = false)>]
-type PicklerFactoryAttribute<'T>() =
+[<AttributeUsage(AttributeTargets.Class ||| AttributeTargets.Struct, AllowMultiple = false)>]
+type JsonTypeAttribute() =
     inherit Attribute()
-    abstract Create : IPicklerResolver -> JsonPickler<'T>
+    member val RequiredFields = false with get,set
+    member val Pickler : Type = null with get,set
+
+[<AttributeUsage(AttributeTargets.Property, AllowMultiple = false)>]
+type JsonPropertyAttribute() =
+    inherit Attribute()
+    member val Label : string = null with get,set
+    member val Pickler : Type = null with get,set
+    member val Required = false with get,set

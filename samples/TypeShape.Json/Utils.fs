@@ -2,6 +2,7 @@
 module internal Vardusia.Utils
 
 open System
+open System.Reflection
 open System.Globalization
 
 type OAttribute = System.Runtime.InteropServices.OptionalAttribute
@@ -34,7 +35,14 @@ let inline isNumber fmt (value : string) =
     let mutable x = 0.
     Double.TryParse(value, NumberStyles.Any, fmt, &x)
 
+let allInstances = BindingFlags.Instance ||| BindingFlags.Public ||| BindingFlags.NonPublic 
+let getParameterlessCtor (t : Type) = t.GetConstructor(allInstances, null, [||], [||])
+
+let wrapDelegate<'Dele when 'Dele :> System.Delegate>(methodInfo : MethodInfo) =
+    Delegate.CreateDelegate(typeof<'Dele>, methodInfo) :?> 'Dele
+
 module Array =
+    let inline clone (array : ^t[]) = array.Clone() :?> ^t[]
     let inline mapFast (f : ^a -> ^b) (xs : ^a[]) =
         let n = xs.Length
         let ys = Array.zeroCreate< ^b> n

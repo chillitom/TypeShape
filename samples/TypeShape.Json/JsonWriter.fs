@@ -81,6 +81,7 @@ module private JsonWriterImpl =
 
 open JsonWriterImpl
 
+[<Sealed>]
 type JsonWriter(indent : int, fmt : IFormatProvider) =
     let fmt = getDefaultFmt fmt
     let sb = new StringBuilder()
