@@ -71,6 +71,7 @@
     <Compile Include="Vardusia.fs" />
     <Compile Include="JsonValue.fs" />
     <None Include="Script.fsx" />
+    <None Include="NewtonsoftValue.fsx" />
     <Content Include="packages.config" />
   </ItemGroup>
   <ItemGroup>

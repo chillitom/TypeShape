@@ -5,33 +5,6 @@ open Vardusia
 open System.Reflection
 open System.Collections.Generic
 
-type JWriter = JsonWriter -> unit
-
-//type JObj() =
-//    member __.Field
-
-let (.=) (pickler : JsonPickler<'T>) (kv : KeyValuePair<string, 'T>) =
-    fun (w : JsonWriter) -> w.WriteKey kv.Key ; pickler.Pickle w kv.Value
-
-Pickler.auto<int> .= "key" ** 42
-
-
-let ( ** ) (key : string) (pickler : JsonPickler<'T>) =
-    fun (t : 'T) (w : JsonWriter) -> w.WriteKey key ; pickler.Pickle w t
-
-
-pickler **
-
-//type Foo = Bar
-//with
-//    static member (?<-) (p : Foo, key : string, value : 'T) =
-//        fun (w : JsonWriter) -> w.WriteKey key // ; p.Pickle w value
-
-
-////Foo.(?<-) "value" Pickler.auto<int> 52
-//Bar ? "poutsa" <- 12
-    
-
 let json =
     jval.array [ 
         jval.obj [
