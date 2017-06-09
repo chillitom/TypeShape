@@ -22,6 +22,7 @@ let rec mkGenerator<'T> () : Gen<'T> =
     | Shape.String -> wrap Arb.generate<string>
     | Shape.Guid -> wrap Arb.generate<Guid>
     | Shape.DateTime -> wrap Arb.generate<DateTime>
+    | Shape.Enum _ -> wrap Arb.generate<'T>    
     | Shape.FSharpOption s ->
         s.Accept { new IFSharpOptionVisitor<Gen<'T>> with
             member __.Visit<'t> () =
